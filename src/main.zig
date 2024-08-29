@@ -1,6 +1,5 @@
 const std = @import("std");
 const assert = std.debug.assert;
-
 const vaxis = @import("vaxis");
 
 const MoveFunc = fn (Board) u8;
@@ -100,7 +99,7 @@ const Game = struct {
     turn: u8,
     current_player: Mark,
     players: [2]Player,
-    move_funcs: [2]MoveFunc,
+    move_funcs: [2]*const MoveFunc,
 
     fn init(self: *Self) void {
         self.board = .{ .x = 0, .o = 0 };
@@ -176,6 +175,6 @@ fn getPreCacheMove(board: *Board) u8 {
 }
 
 pub fn main() !void {
-    var game: Game = Game.init();
+    var game: Game = undefined;
     game.init();
 }
