@@ -3,11 +3,10 @@ Tic-tac-toe TUI game written in Zig
 
 # Features
 * TUI Interface
+* GUI Interface
 * Local PvP
 * CPU players with adjustable difficulty
     * Bots can play against other bots, too!
-* Remote PvP
-    * Only local vs. remote is allowed
 
 # How To Run
 ## From Releases
