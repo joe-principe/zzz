@@ -322,6 +322,21 @@ const TuiApp = struct {
 
         const win = self.vx.window();
 
+        var player: u8 = undefined;
+        var mark: u8 = undefined;
+        if (game.current_player == Mark.X) {
+            player = 1;
+            mark = 'X';
+        } else {
+            player = 2;
+            mark = 'O';
+        }
+
+        const trn: vaxis.Segment = .{
+            .text = try std.fmt.allocPrint(self.allocator, "Turn {d}. Player {d}'s ({c}) turn.", .{ game.turn, player, mark }),
+        };
+        defer self.allocator.free(trn.text);
+
         const hdr: vaxis.Segment = .{
             .text = "    1     2     3  ",
         };
@@ -347,23 +362,25 @@ const TuiApp = struct {
         };
         defer self.allocator.free(bot.text);
 
-        _ = try win.printSegment(hdr, .{});
+        _ = try win.printSegment(trn, .{});
 
-        _ = try win.printSegment(row, .{ .row_offset = 2 });
-        _ = try win.printSegment(top, .{ .row_offset = 3 });
+        _ = try win.printSegment(hdr, .{ .row_offset = 2 });
+
         _ = try win.printSegment(row, .{ .row_offset = 4 });
-
-        _ = try win.printSegment(div, .{ .row_offset = 5 });
-
+        _ = try win.printSegment(top, .{ .row_offset = 5 });
         _ = try win.printSegment(row, .{ .row_offset = 6 });
-        _ = try win.printSegment(mid, .{ .row_offset = 7 });
+
+        _ = try win.printSegment(div, .{ .row_offset = 7 });
+
         _ = try win.printSegment(row, .{ .row_offset = 8 });
-
-        _ = try win.printSegment(div, .{ .row_offset = 9 });
-
+        _ = try win.printSegment(mid, .{ .row_offset = 9 });
         _ = try win.printSegment(row, .{ .row_offset = 10 });
-        _ = try win.printSegment(bot, .{ .row_offset = 11 });
+
+        _ = try win.printSegment(div, .{ .row_offset = 11 });
+
         _ = try win.printSegment(row, .{ .row_offset = 12 });
+        _ = try win.printSegment(bot, .{ .row_offset = 13 });
+        _ = try win.printSegment(row, .{ .row_offset = 14 });
 
         try self.vx.render(self.tty.anyWriter());
     }
@@ -430,7 +447,7 @@ const TuiApp = struct {
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
             const cur_x = cursor_pos.x * 6 + 4;
-            const cur_y = cursor_pos.y * 4 + 3;
+            const cur_y = cursor_pos.y * 4 + 5;
             win.showCursor(cur_x, cur_y);
         }
 
@@ -466,14 +483,14 @@ const TuiApp = struct {
 
             // Tie game
             if (result == WinState.Tie) {
-                _ = try win.printSegment(tie, .{ .row_offset = 14 });
+                _ = try win.printSegment(tie, .{ .row_offset = 16 });
             }
             // Someone won
             else {
-                _ = try win.printSegment(game_won, .{ .row_offset = 14 });
+                _ = try win.printSegment(game_won, .{ .row_offset = 16 });
             }
 
-            _ = try win.printSegment(end, .{ .row_offset = 16 });
+            _ = try win.printSegment(end, .{ .row_offset = 18 });
 
             win.hideCursor();
             try self.printBoard(game);
