@@ -321,7 +321,6 @@ const TuiApp = struct {
         const b = game.board.toSlice();
 
         const win = self.vx.window();
-        win.clear();
 
         const hdr: vaxis.Segment = .{
             .text = "    1     2     3  ",
@@ -459,29 +458,30 @@ const TuiApp = struct {
             .text = "The game is a tie!",
         };
 
-        const end: vaxis.Segment = .{ .text = "Press enter to exit." };
+        const end: vaxis.Segment = .{ .text = "Press escape to exit." };
 
         while (true) {
             const win = self.vx.window();
             win.clear();
 
-            try self.printBoard(game);
-
             // Tie game
             if (result == WinState.Tie) {
-                _ = try win.printSegment(tie, .{ .row_offset = 13 });
+                _ = try win.printSegment(tie, .{ .row_offset = 14 });
             }
             // Someone won
             else {
-                _ = try win.printSegment(game_won, .{ .row_offset = 13 });
+                _ = try win.printSegment(game_won, .{ .row_offset = 14 });
             }
 
-            _ = try win.printSegment(end, .{ .row_offset = 15 });
+            _ = try win.printSegment(end, .{ .row_offset = 16 });
+
+            win.hideCursor();
+            try self.printBoard(game);
 
             const event = self.loop.nextEvent();
             switch (event) {
                 .key_press => |key| {
-                    if (key.matchesAny(&select_keys, .{})) {
+                    if (key.matches(vaxis.Key.escape, .{})) {
                         break;
                     }
                     // yeet
@@ -558,15 +558,12 @@ pub fn main() !void {
 
         // Waits a second if both players are bots
         // This is so moves are visible. Otherwise, game finishes instantly
-        if (game.players[0] == PlayerType.Computer and game.players[1] == PlayerType.Computer) {
-            std.time.sleep(1 * std.time.ns_per_s);
-        }
+        // if (game.players[0] == PlayerType.Computer and game.players[1] == PlayerType.Computer) {
+        //     std.time.sleep(1 * std.time.ns_per_s);
+        // }
 
         game.nextTurn();
-
-        if (game.turn >= 5) {
-            game_status = game.checkForWin();
-        }
+        game_status = game.checkForWin();
     }
 
     try app.printEndScreen(&game, game_status);
@@ -592,6 +589,28 @@ test "place_o" {
         b.placeMark(Mark.O, i);
 
         try std.testing.expect(b.isPositionOccupied(0));
-        try std.testing.expect((b.x & std.math.shl(u9, 1, 8 - i)) != 0);
+        try std.testing.expect((b.o & std.math.shl(u9, 1, 8 - i)) != 0);
+    }
+}
+
+test "win_x" {
+    const boards: [8]u9 = .{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
+    var g: Game = Game.init();
+
+    for (boards) |board| {
+        g.board.x = board;
+
+        try std.testing.expectEqual(WinState.X, g.checkForWin());
+    }
+}
+
+test "win_o" {
+    const boards: [8]u9 = .{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
+    var g: Game = Game.init();
+
+    for (boards) |board| {
+        g.board.o = board;
+
+        try std.testing.expectEqual(WinState.O, g.checkForWin());
     }
 }
