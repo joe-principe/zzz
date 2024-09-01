@@ -112,19 +112,18 @@ const Board = struct {
         return b;
     }
 
-    fn getLegalMoves(self: *Self) []u8 {
-        var legal: [9]u8 = undefined;
+    fn getLegalMoves(self: *Self, slice: *[9]u8) usize {
         var i: u8 = 0;
         var j: u8 = 0;
 
         while (i < 9) : (i += 1) {
             if (!self.isPositionOccupied(i)) {
-                legal[j] = i;
+                slice[j] = i;
                 j += 1;
             }
         }
 
-        return legal[0..j];
+        return j;
     }
 };
 
@@ -308,6 +307,11 @@ const TuiApp = struct {
                     // Select an option
                     else if (key.matchesAny(&select_keys, .{})) {
                         game.players[player].Computer = @enumFromInt(selected_option);
+
+                        // Have to clear here, otherwise some options will still
+                        // be shown when printing the board
+                        win.clear();
+                        break;
                     }
                     // N/A
                     else {}
@@ -363,7 +367,6 @@ const TuiApp = struct {
         defer self.allocator.free(bot.text);
 
         _ = try win.printSegment(trn, .{});
-
         _ = try win.printSegment(hdr, .{ .row_offset = 2 });
 
         _ = try win.printSegment(row, .{ .row_offset = 4 });
@@ -510,6 +513,17 @@ const TuiApp = struct {
     }
 };
 
+fn getEasyMove(game: *Game) u8 {
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = game.board.getLegalMoves(&legal_moves);
+
+    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+    var rnd = std.rand.DefaultPrng.init(seed);
+    const num = rnd.random().uintLessThan(usize, num_legal);
+
+    return legal_moves[num];
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -570,14 +584,15 @@ pub fn main() !void {
         //     }
         // },
         // };
-        const pos = try app.getLocalMove(&game);
+        // const pos = try app.getLocalMove(&game);
+        const pos = getEasyMove(&game);
         game.board.placeMark(game.current_player, pos);
 
         // Waits a second if both players are bots
         // This is so moves are visible. Otherwise, game finishes instantly
-        // if (game.players[0] == PlayerType.Computer and game.players[1] == PlayerType.Computer) {
-        //     std.time.sleep(1 * std.time.ns_per_s);
-        // }
+        if (game.players[0] == PlayerType.Computer and game.players[1] == PlayerType.Computer) {
+            std.time.sleep(1 * std.time.ns_per_s);
+        }
 
         game.nextTurn();
         game_status = game.checkForWin();
@@ -594,7 +609,7 @@ test "place_x" {
         b.placeMark(Mark.X, i);
 
         try std.testing.expect(b.isPositionOccupied(0));
-        try std.testing.expect((b.x & std.math.shl(u9, 1, 8 - i)) != 0);
+        try std.testing.expect((b.x & std.math.shl(u9, 1, 9 - (i + 1))) != 0);
     }
 }
 
@@ -606,7 +621,7 @@ test "place_o" {
         b.placeMark(Mark.O, i);
 
         try std.testing.expect(b.isPositionOccupied(0));
-        try std.testing.expect((b.o & std.math.shl(u9, 1, 8 - i)) != 0);
+        try std.testing.expect((b.o & std.math.shl(u9, 1, 9 - (i + 1))) != 0);
     }
 }
 
@@ -630,4 +645,27 @@ test "win_o" {
 
         try std.testing.expectEqual(WinState.O, g.checkForWin());
     }
+}
+
+test "tie_game" {
+    const boards: [4]Board = .{
+        .{ .x = 0b101_011_010, .o = 0b010_100_101 },
+        .{ .x = 0b011_110_001, .o = 0b100_001_110 },
+        .{ .x = 0b010_110_101, .o = 0b101_001_010 },
+        .{ .x = 0b100_011_110, .o = 0b011_100_001 },
+    };
+    var g: Game = Game.init();
+    g.turn = 10;
+
+    for (boards) |board| {
+        g.board = board;
+
+        try std.testing.expectEqual(WinState.Tie, g.checkForWin());
+    }
+}
+
+test "easy_bot" {
+    var g: Game = Game.init();
+
+    try std.testing.expectEqual(false, g.board.isPositionOccupied(getEasyMove(&g)));
 }
