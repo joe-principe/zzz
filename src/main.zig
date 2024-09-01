@@ -77,8 +77,8 @@ const Board = struct {
     // Note: << operator is borked rn (zig 0.13.0)
 
     fn isPositionOccupied(self: *Self, pos: u8) bool {
-        const x_empty: bool = (self.x & std.math.shl(u9, 1, (9 - (pos + 1)))) == 0;
-        const o_empty: bool = (self.o & std.math.shl(u9, 1, (9 - (pos + 1)))) == 0;
+        const x_empty: bool = (self.x & std.math.shl(u9, 1, 9 - (pos + 1))) == 0;
+        const o_empty: bool = (self.o & std.math.shl(u9, 1, 9 - (pos + 1))) == 0;
 
         return if (x_empty and o_empty) false else true;
     }
@@ -86,19 +86,19 @@ const Board = struct {
     fn placeMark(self: *Self, mark: Mark, pos: u8) void {
         switch (mark) {
             Mark.X => {
-                self.x |= std.math.shl(u9, 1, (9 - (pos + 1)));
+                self.x |= std.math.shl(u9, 1, 9 - (pos + 1));
             },
             Mark.O => {
-                self.o |= std.math.shl(u9, 1, (9 - (pos + 1)));
+                self.o |= std.math.shl(u9, 1, 9 - (pos + 1));
             },
         }
     }
 
-    fn toSlice(self: *Self) [9]u8 {
+    fn toString(self: *Self) [9]u8 {
         var b: [9]u8 = .{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
 
         for (0..9) |i| {
-            const mask = std.math.shl(u9, 1, (9 - (i + 1)));
+            const mask = std.math.shl(u9, 1, 9 - (i + 1));
 
             if ((self.x & mask) != 0) {
                 b[i] = 'X';
@@ -124,6 +124,16 @@ const Board = struct {
         }
 
         return j;
+    }
+
+    fn getOccupant(self: *Self, pos: u8) ?Mark {
+        if (!self.isPositionOccupied(pos)) {
+            return null;
+        } else if ((self.x & std.math.shl(u9, 1, 9 - (i + 1))) == 1) {
+            return Mark.X;
+        } else {
+            return Mark.O;
+        }
     }
 };
 
@@ -322,7 +332,7 @@ const TuiApp = struct {
     }
 
     fn printBoard(self: *Self, game: *Game) !void {
-        const b = game.board.toSlice();
+        const b = game.board.toString();
 
         const win = self.vx.window();
 
@@ -522,6 +532,61 @@ fn getEasyMove(game: *Game) u8 {
     const num = rnd.random().uintLessThan(usize, num_legal);
 
     return legal_moves[num];
+}
+
+fn getMediumMove(game: *Game) u8 {
+    var pos: u8 = 0;
+    var sum: u8 = 0;
+
+    // Check the rows for a winning move
+    for (0..3) |row| {
+        for (0..3) |col| {
+            const index: u8 = col + 3 * row;
+
+            if (!game.board.isPositionOccupied(index)) {
+                pos = index;
+            }
+            if (game.board.getOccupant(index) == game.current_player) {
+                sum += 1;
+            }
+        }
+        if (sum == 2) return pos;
+    }
+    sum = 0;
+
+    // Check the columns for a winning move
+    for (0..3) |row| {
+        for (0..3) |col| {
+            const index: u8 = row + 3 * col;
+
+            if (!game.board.isPositionOccupied(index)) { pos = index; }
+            else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+        }
+        if (sum == 2) return pos;
+    }
+    sum = 0;
+
+    // Check the backslash for a winning move
+    for (0..3) |i| {
+        const index = i * 4;
+
+        if (!game.board.isPositionOccupied(index)) { pos = index; }
+        else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+    }
+    if (sum == 2) return pos;
+    sum = 0;
+
+    // Check the forwardslash for a winning move
+    for (1..4) |i| {
+        const index = i * 2;
+
+        if (!game.board.isPositionOccupied(index)) { pos = index; }
+        else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+    }
+    if (sum == 2) return pos;
+
+    // Otherwise, just return a random position
+    return getEasyMove(game);
 }
 
 pub fn main() !void {
