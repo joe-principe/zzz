@@ -340,27 +340,27 @@ const TuiApp = struct {
         defer self.allocator.free(trn.text);
 
         const hdr: vaxis.Segment = .{
-            .text = "    1     2     3  ",
+            .text = "     1     2     3  ",
         };
 
         const row: vaxis.Segment = .{
-            .text = "       \u{2551}     \u{2551}     ",
+            .text = "        \u{2551}     \u{2551}     ",
         };
 
-        const div: vaxis.Segment = .{ .text = "  \u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}" };
+        const div: vaxis.Segment = .{ .text = "   \u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}" };
 
         const top: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "A   {c}  {u}  {c}  {u}  {c}  ", .{ b[0], '\u{2551}', b[1], '\u{2551}', b[2] }),
+            .text = try std.fmt.allocPrint(self.allocator, "A    {c}  {u}  {c}  {u}  {c}  ", .{ b[0], '\u{2551}', b[1], '\u{2551}', b[2] }),
         };
         defer self.allocator.free(top.text);
 
         const mid: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "B   {c}  {u}  {c}  {u}  {c}  ", .{ b[3], '\u{2551}', b[4], '\u{2551}', b[5] }),
+            .text = try std.fmt.allocPrint(self.allocator, "B    {c}  {u}  {c}  {u}  {c}  ", .{ b[3], '\u{2551}', b[4], '\u{2551}', b[5] }),
         };
         defer self.allocator.free(mid.text);
 
         const bot: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "C   {c}  {u}  {c}  {u}  {c}  ", .{ b[6], '\u{2551}', b[7], '\u{2551}', b[8] }),
+            .text = try std.fmt.allocPrint(self.allocator, "C    {c}  {u}  {c}  {u}  {c}  ", .{ b[6], '\u{2551}', b[7], '\u{2551}', b[8] }),
         };
         defer self.allocator.free(bot.text);
 
@@ -447,7 +447,7 @@ const TuiApp = struct {
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
-            const cur_x = cursor_pos.x * 6 + 4;
+            const cur_x = cursor_pos.x * 6 + 5;
             const cur_y = cursor_pos.y * 4 + 5;
             win.showCursor(cur_x, cur_y);
         }
@@ -741,10 +741,10 @@ pub fn main() !void {
         //     }
         // },
         // };
-        // const pos = try app.getLocalMove(&game);
+        const pos = try app.getLocalMove(&game);
         // const pos = getEasyMove(&game);
         // const pos = getMediumMove(&game);
-        const pos = getMinimaxMove(&game);
+        // const pos = getMinimaxMove(&game);
         game.board.placeMark(game.current_player, pos);
 
         // Waits a second if both players are bots
