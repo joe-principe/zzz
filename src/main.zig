@@ -722,6 +722,121 @@ fn minimaxScore(
     return min_score;
 }
 
+fn getABPruningMove(game: *Game) u8 {
+    var best_score: i8 = -11;
+    var best_pos: [9]u8 = undefined;
+    var num_best: usize = 0;
+
+    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
+
+    var alpha: i8 = -10;
+    var beta: i8 = 10;
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = game.board.getLegalMoves(&legal_moves);
+
+    // If there is only one legal move, just make it
+    if (num_legal == 1) return legal_moves[0];
+
+    var prediction_board: Board = game.board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(game.current_player, legal_moves[i]);
+
+        const score: i8 = ABPruningScore(&prediction_board, &alpha, &beta, true, opponent, game.current_player, @truncate(11 - num_legal));
+
+        if (score > best_score) {
+            // If we found a new best move, reset the number of best moves
+            // Then add this move to the start of the list
+            num_best = 0;
+            best_pos[num_best] = legal_moves[i];
+            best_score = score;
+            num_best += 1;
+        } else if (score == best_score) {
+            best_pos[num_best] = legal_moves[i];
+            num_best += 1;
+        }
+
+        // Clear the mark we just placed before the next loop iteration
+        if (game.current_player == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+    var rnd = std.rand.DefaultPrng.init(seed);
+    const num = rnd.random().uintLessThan(usize, num_best);
+
+    return best_pos[num];
+}
+
+fn ABPruningScore(
+    board: *Board,
+    alpha: *i8,
+    beta: *i8,
+    maximizing_player: bool,
+    maximizer: Mark,
+    minimizer: Mark,
+    turn: u8,
+) i8 {
+    var max_score: i8 = -10;
+    var min_score: i8 = 10;
+
+    const status = board.checkForWin(turn);
+    switch (status) {
+        WinState.None => {},
+        WinState.Tie => return 0,
+        else => if (maximizing_player) return 10 else return -10,
+    }
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = board.getLegalMoves(&legal_moves);
+
+    var prediction_board: Board = .{ .x = board.x, .o = board.o };
+
+    if (maximizing_player) {
+        for (0..num_legal) |i| {
+            prediction_board.placeMark(maximizer, legal_moves[i]);
+
+            const score: i8 = ABPruningScore(&prediction_board, alpha, beta, false, minimizer, maximizer, turn + 1);
+
+            if (score >= max_score) max_score = score;
+            if (score >= alpha.*) alpha.* = score;
+
+            if (beta.* <= alpha.*) break;
+
+            // Clear the mark we just placed before the next loop iteration
+            if (maximizer == Mark.X) {
+                prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+            } else {
+                prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+            }
+        }
+        return max_score;
+    } else {
+        for (0..num_legal) |i| {
+            prediction_board.placeMark(minimizer, legal_moves[i]);
+
+            const score: i8 = ABPruningScore(&prediction_board, alpha, beta, true, minimizer, maximizer, turn + 1);
+
+            if (score <= min_score) min_score = score;
+            if (score <= beta.*) beta.* = score;
+
+            if (beta.* <= alpha.*) break;
+
+            // Clear the mark we just placed before the next loop iteration
+            if (minimizer == Mark.X) {
+                prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+            } else {
+                prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+            }
+        }
+        return min_score;
+    }
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -764,6 +879,7 @@ pub fn main() !void {
                     .Easy => pos = getEasyMove(&game),
                     .Medium => pos = getMediumMove(&game),
                     .Minimax => pos = getMinimaxMove(&game),
+                    .ABPruning => pos = getABPruningMove(&game),
                     else => pos = getMinimaxMove(&game),
                     // .Cache => {
                     //     break 0;
