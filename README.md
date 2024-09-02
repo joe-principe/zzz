@@ -18,7 +18,10 @@ missing "vaxis", then run `zig fetch --save git+https://github.com/rockorager/li
 and that should add it or something, idk.
 
 # How To Play
-Move around using WASD or the arrow keys. Press enter or space to select.
+Move around using WASD, the arrow keys, hjkl, or the keypad arrows (make sure
+numlock is off).
+
+Press enter, space, or keypad enter to select.
 
 # Dependencies
 1) [Zig](https://ziglang.org/)

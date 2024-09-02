@@ -60,6 +60,34 @@ const WinState = enum(u2) {
     O,
     Tie,
 
+    fn scoreToWinState(
+        score: i8,
+        player: Mark,
+        opponent: Mark,
+    ) WinState {
+        if (score == 10) {
+            if (player == Mark.X) return WinState.X else return WinState.O;
+        } else if (score == -10) {
+            if (opponent == Mark.X) return WinState.O else return WinState.X;
+        }
+
+        return WinState.Tie;
+    }
+
+    fn scoreFromWinState(
+        result: WinState,
+        player: Mark,
+        opponent: Mark,
+    ) i8 {
+        if (result == WinState.X) {
+            if (player == Mark.X) return 10 else return -10;
+        } else if (result == WinState.O) {
+            if (opponent == Mark.O) return -10 else return 10;
+        }
+
+        return 0;
+    }
+
     comptime {
         for (0..std.enums.values(WinState).len) |i| {
             const res: WinState = @enumFromInt(i);
@@ -74,7 +102,7 @@ const Board = struct {
     x: u9,
     o: u9,
 
-    // Note: << operator is borked rn (zig 0.13.0)
+    // Note: << operator is borked rn (zig 0.13.0), use std.math.shl
 
     fn checkForWin(self: *Self, turn: u8) WinState {
         const winning_boards = [_]u9{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
@@ -101,12 +129,8 @@ const Board = struct {
 
     fn placeMark(self: *Self, mark: Mark, pos: u8) void {
         switch (mark) {
-            Mark.X => {
-                self.x |= std.math.shl(u9, 1, 8 - pos);
-            },
-            Mark.O => {
-                self.o |= std.math.shl(u9, 1, 8 - pos);
-            },
+            Mark.X => self.x |= std.math.shl(u9, 1, 8 - pos),
+            Mark.O => self.o |= std.math.shl(u9, 1, 8 - pos),
         }
     }
 
@@ -205,7 +229,11 @@ const TuiApp = struct {
         self.tty.deinit();
     }
 
-    fn setPlayer(self: *Self, game: *Game, player: u8) !void {
+    fn setPlayer(
+        self: *Self,
+        game: *Game,
+        player: u8,
+    ) !void {
         var selected_option: usize = 0;
 
         const options = [_][]const u8{
@@ -261,7 +289,11 @@ const TuiApp = struct {
         }
     }
 
-    fn setBotDifficulty(self: *Self, game: *Game, player: u1) !void {
+    fn setBotDifficulty(
+        self: *Self,
+        game: *Game,
+        player: u8,
+    ) !void {
         var selected_option: usize = 0;
         const options = [_][]const u8{
             "Easy",
@@ -455,7 +487,11 @@ const TuiApp = struct {
         return pos;
     }
 
-    fn printEndScreen(self: *Self, game: *Game, result: WinState) !void {
+    fn printEndScreen(
+        self: *Self,
+        game: *Game,
+        result: WinState,
+    ) !void {
         var winner: u8 = undefined;
         var winner_mark: u8 = undefined;
 
@@ -613,11 +649,11 @@ fn getMinimaxMove(game: *Game) u8 {
     for (0..num_legal) |i| {
         prediction_board.placeMark(game.current_player, legal_moves[i]);
 
-        const score: i8 = minimax_score(&prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
+        const score: i8 = minimaxScore(&prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
 
         if (score > best_score) {
             // If we found a new best move, reset the number of best moves
-            // Then add this move to the list
+            // Then add this move to the start of the list
             num_best = 0;
             best_pos[num_best] = legal_moves[i];
             best_score = score;
@@ -642,7 +678,12 @@ fn getMinimaxMove(game: *Game) u8 {
     return best_pos[num];
 }
 
-fn minimax_score(board: *Board, player_to_move: Mark, player_to_optimize: Mark, turn: u8) i8 {
+fn minimaxScore(
+    board: *Board,
+    player_to_move: Mark,
+    player_to_optimize: Mark,
+    turn: u8,
+) i8 {
     var max_score: i8 = -10;
     var min_score: i8 = 10;
 
@@ -664,7 +705,7 @@ fn minimax_score(board: *Board, player_to_move: Mark, player_to_optimize: Mark, 
     for (0..num_legal) |i| {
         prediction_board.placeMark(player_to_move, legal_moves[i]);
 
-        const score: i8 = minimax_score(&prediction_board, opponent, player_to_optimize, turn + 1);
+        const score: i8 = minimaxScore(&prediction_board, opponent, player_to_optimize, turn + 1);
 
         if (score > max_score) max_score = score;
         if (score < min_score) min_score = score;
@@ -695,7 +736,7 @@ pub fn main() !void {
     try app.init_loop();
     defer app.deinit();
 
-    var game = Game.init();
+    var game: Game = Game.init();
 
     try app.setPlayer(&game, 0);
     if (game.players[0] == PlayerType.Computer) {
@@ -711,40 +752,34 @@ pub fn main() !void {
     while (game_status == WinState.None) {
         try app.printBoard(&game);
 
-        // const pos = switch (game.players[@as(usize, @intFromEnum(game.current_player))]) {
-        //     .Local => {
-        //         break app.getLocalMove(&game);
-        //     },
-        // .Computer => |difficulty| {
-        //     switch (difficulty) {
-        //         .Easy => {
-        //             break 0;
-        //         },
-        //         .Medium => {
-        //             break 0;
-        //         },
-        //         .Minimax => {
-        //             break 0;
-        //         },
-        //         .Cache => {
-        //             break 0;
-        //         },
-        //         .FastCache => {
-        //             break 0;
-        //         },
-        //         .ABPruning => {
-        //             break 0;
-        //         },
-        //         .PreCache => {
-        //             break 0;
-        //         },
-        //     }
-        // },
-        // };
-        const pos = try app.getLocalMove(&game);
-        // const pos = getEasyMove(&game);
-        // const pos = getMediumMove(&game);
-        // const pos = getMinimaxMove(&game);
+        var pos: u8 = undefined;
+        switch (game.players[@as(usize, @intFromEnum(game.current_player))]) {
+            .Local => {
+                if (app.getLocalMove(&game)) |val| {
+                    pos = val;
+                } else |_| return;
+            },
+            .Computer => |difficulty| {
+                switch (difficulty) {
+                    .Easy => pos = getEasyMove(&game),
+                    .Medium => pos = getMediumMove(&game),
+                    .Minimax => pos = getMinimaxMove(&game),
+                    else => pos = getMinimaxMove(&game),
+                    // .Cache => {
+                    //     break 0;
+                    // },
+                    // .FastCache => {
+                    //     break 0;
+                    // },
+                    // .ABPruning => {
+                    //     break 0;
+                    // },
+                    // .PreCache => {
+                    //     break 0;
+                    // },
+                }
+            },
+        }
         game.board.placeMark(game.current_player, pos);
 
         // Waits a second if both players are bots
