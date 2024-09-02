@@ -77,8 +77,8 @@ const Board = struct {
     // Note: << operator is borked rn (zig 0.13.0)
 
     fn isPositionOccupied(self: *Self, pos: u8) bool {
-        const x_empty: bool = (self.x & std.math.shl(u9, 1, 9 - (pos + 1))) == 0;
-        const o_empty: bool = (self.o & std.math.shl(u9, 1, 9 - (pos + 1))) == 0;
+        const x_empty: bool = (self.x & std.math.shl(u9, 1, 8 - pos)) == 0;
+        const o_empty: bool = (self.o & std.math.shl(u9, 1, 8 - pos)) == 0;
 
         return if (x_empty and o_empty) false else true;
     }
@@ -86,10 +86,10 @@ const Board = struct {
     fn placeMark(self: *Self, mark: Mark, pos: u8) void {
         switch (mark) {
             Mark.X => {
-                self.x |= std.math.shl(u9, 1, 9 - (pos + 1));
+                self.x |= std.math.shl(u9, 1, 8 - pos);
             },
             Mark.O => {
-                self.o |= std.math.shl(u9, 1, 9 - (pos + 1));
+                self.o |= std.math.shl(u9, 1, 8 - pos);
             },
         }
     }
@@ -98,7 +98,7 @@ const Board = struct {
         var b: [9]u8 = .{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
 
         for (0..9) |i| {
-            const mask = std.math.shl(u9, 1, 9 - (i + 1));
+            const mask = std.math.shl(u9, 1, 8 - i);
 
             if ((self.x & mask) != 0) {
                 b[i] = 'X';
@@ -126,14 +126,13 @@ const Board = struct {
         return j;
     }
 
-    fn getOccupant(self: *Self, pos: u8) ?Mark {
-        if (!self.isPositionOccupied(pos)) {
-            return null;
-        } else if ((self.x & std.math.shl(u9, 1, 9 - (i + 1))) == 1) {
+    fn getOccupant(self: *Self, pos: u8) Mark {
+        if ((self.x & std.math.shl(u9, 1, 8 - pos)) != 0) {
             return Mark.X;
-        } else {
-            return Mark.O;
         }
+        // if ((self.o & std.math.shl(u9, 1, 8 - pos)) != 0) {
+        return Mark.O;
+        // }
     }
 };
 
@@ -535,53 +534,71 @@ fn getEasyMove(game: *Game) u8 {
 }
 
 fn getMediumMove(game: *Game) u8 {
-    var pos: u8 = 0;
-    var sum: u8 = 0;
+    const b: [9]u8 = game.board.toString();
+    const mark: u8 = if (game.current_player == Mark.X) 'X' else 'O';
 
     // Check the rows for a winning move
-    for (0..3) |row| {
-        for (0..3) |col| {
+    var row: u8 = 0;
+    var col: u8 = 0;
+    var pos: u8 = 0;
+    var sum: u8 = 0;
+    while (row < 3) : (row += 1) {
+        while (col < 3) : (col += 1) {
             const index: u8 = col + 3 * row;
 
             if (!game.board.isPositionOccupied(index)) {
                 pos = index;
-            }
-            if (game.board.getOccupant(index) == game.current_player) {
+            } else if (b[index] == mark) {
                 sum += 1;
             }
         }
         if (sum == 2) return pos;
+        col = 0;
+        sum = 0;
     }
-    sum = 0;
 
     // Check the columns for a winning move
-    for (0..3) |row| {
-        for (0..3) |col| {
-            const index: u8 = row + 3 * col;
+    row = 0;
+    col = 0;
+    while (col < 3) : (col += 1) {
+        while (row < 3) : (row += 1) {
+            const index: u8 = col + 3 * row;
 
-            if (!game.board.isPositionOccupied(index)) { pos = index; }
-            else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+            if (!game.board.isPositionOccupied(index)) {
+                pos = index;
+            } else if (b[index] == mark) {
+                sum += 1;
+            }
         }
         if (sum == 2) return pos;
+        row = 0;
+        sum = 0;
     }
-    sum = 0;
 
     // Check the backslash for a winning move
-    for (0..3) |i| {
-        const index = i * 4;
+    var i: u8 = 0;
+    while (i < 3) : (i += 1) {
+        const index: u8 = i * 4;
 
-        if (!game.board.isPositionOccupied(index)) { pos = index; }
-        else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+        if (!game.board.isPositionOccupied(index)) {
+            pos = index;
+        } else if (b[index] == mark) {
+            sum += 1;
+        }
     }
     if (sum == 2) return pos;
-    sum = 0;
 
     // Check the forwardslash for a winning move
-    for (1..4) |i| {
-        const index = i * 2;
+    i = 1;
+    sum = 0;
+    while (i < 4) : (i += 1) {
+        const index: u8 = i * 2;
 
-        if (!game.board.isPositionOccupied(index)) { pos = index; }
-        else if (game.board.getOccupant(index) == game.current_player) { sum += 1; }
+        if (!game.board.isPositionOccupied(index)) {
+            pos = index;
+        } else if (b[index] == mark) {
+            sum += 1;
+        }
     }
     if (sum == 2) return pos;
 
@@ -650,7 +667,7 @@ pub fn main() !void {
         // },
         // };
         // const pos = try app.getLocalMove(&game);
-        const pos = getEasyMove(&game);
+        const pos = getMediumMove(&game);
         game.board.placeMark(game.current_player, pos);
 
         // Waits a second if both players are bots
