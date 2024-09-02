@@ -76,6 +76,22 @@ const Board = struct {
 
     // Note: << operator is borked rn (zig 0.13.0)
 
+    fn checkForWin(self: *Self, turn: u8) WinState {
+        const winning_boards = [_]u9{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
+
+        for (winning_boards) |board| {
+            if (self.x & board == board) {
+                return WinState.X;
+            } else if (self.o & board == board) {
+                return WinState.O;
+            }
+        }
+
+        if (turn == 10) return WinState.Tie;
+
+        return WinState.None;
+    }
+
     fn isPositionOccupied(self: *Self, pos: u8) bool {
         const x_empty: bool = (self.x & std.math.shl(u9, 1, 8 - pos)) == 0;
         const o_empty: bool = (self.o & std.math.shl(u9, 1, 8 - pos)) == 0;
@@ -125,15 +141,6 @@ const Board = struct {
 
         return j;
     }
-
-    fn getOccupant(self: *Self, pos: u8) Mark {
-        if ((self.x & std.math.shl(u9, 1, 8 - pos)) != 0) {
-            return Mark.X;
-        }
-        // if ((self.o & std.math.shl(u9, 1, 8 - pos)) != 0) {
-        return Mark.O;
-        // }
-    }
 };
 
 const Game = struct {
@@ -151,24 +158,6 @@ const Game = struct {
             .current_player = Mark.X,
             .players = undefined,
         };
-    }
-
-    fn checkForWin(self: *Self) WinState {
-        const winning_boards = [_]u9{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
-
-        for (winning_boards) |board| {
-            if (self.board.x & board == board) {
-                return WinState.X;
-            } else if (self.board.o & board == board) {
-                return WinState.O;
-            }
-        }
-
-        if (self.turn == 10) {
-            return WinState.Tie;
-        } else {
-            return WinState.None;
-        }
     }
 
     fn nextTurn(self: *Self) void {
@@ -216,7 +205,7 @@ const TuiApp = struct {
         self.tty.deinit();
     }
 
-    fn setPlayer(self: *Self, game: *Game, player: u1) !void {
+    fn setPlayer(self: *Self, game: *Game, player: u8) !void {
         var selected_option: usize = 0;
 
         const options = [_][]const u8{
@@ -231,7 +220,7 @@ const TuiApp = struct {
             win.clear();
 
             const txt: vaxis.Segment = .{
-                .text = try std.fmt.allocPrint(self.allocator, "Choose player {d} ({c}): ", .{ @as(u2, player) + 1, mark }),
+                .text = try std.fmt.allocPrint(self.allocator, "Choose player {d} ({c}): ", .{ player + 1, mark }),
             };
             defer self.allocator.free(txt.text);
 
@@ -606,6 +595,92 @@ fn getMediumMove(game: *Game) u8 {
     return getEasyMove(game);
 }
 
+fn getMinimaxMove(game: *Game) u8 {
+    var best_score: i8 = -11;
+    var best_pos: [9]u8 = undefined;
+    var num_best: usize = 0;
+
+    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = game.board.getLegalMoves(&legal_moves);
+
+    // If there is only one legal move, just make it
+    if (num_legal == 1) return legal_moves[0];
+
+    var prediction_board: Board = game.board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(game.current_player, legal_moves[i]);
+
+        const score: i8 = minimax_score(&prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
+
+        if (score > best_score) {
+            // If we found a new best move, reset the number of best moves
+            // Then add this move to the list
+            num_best = 0;
+            best_pos[num_best] = legal_moves[i];
+            best_score = score;
+            num_best += 1;
+        } else if (score == best_score) {
+            best_pos[num_best] = legal_moves[i];
+            num_best += 1;
+        }
+
+        // Clear the mark we just placed before the next loop iteration
+        if (game.current_player == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+    var rnd = std.rand.DefaultPrng.init(seed);
+    const num = rnd.random().uintLessThan(usize, num_best);
+
+    return best_pos[num];
+}
+
+fn minimax_score(board: *Board, player_to_move: Mark, player_to_optimize: Mark, turn: u8) i8 {
+    var max_score: i8 = -10;
+    var min_score: i8 = 10;
+
+    const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
+
+    const status = board.checkForWin(turn);
+    switch (status) {
+        WinState.None => {},
+        WinState.Tie => return 0,
+        WinState.X => if (player_to_optimize == Mark.X) return 10 else return -10,
+        WinState.O => if (player_to_optimize == Mark.O) return 10 else return -10,
+    }
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = board.getLegalMoves(&legal_moves);
+
+    var prediction_board: Board = .{ .x = board.x, .o = board.o };
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(player_to_move, legal_moves[i]);
+
+        const score: i8 = minimax_score(&prediction_board, opponent, player_to_optimize, turn + 1);
+
+        if (score > max_score) max_score = score;
+        if (score < min_score) min_score = score;
+
+        // Clear the mark we just placed before the next loop iteration
+        if (player_to_move == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    if (player_to_move == player_to_optimize) return max_score;
+    return min_score;
+}
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -667,7 +742,9 @@ pub fn main() !void {
         // },
         // };
         // const pos = try app.getLocalMove(&game);
-        const pos = getMediumMove(&game);
+        // const pos = getEasyMove(&game);
+        // const pos = getMediumMove(&game);
+        const pos = getMinimaxMove(&game);
         game.board.placeMark(game.current_player, pos);
 
         // Waits a second if both players are bots
@@ -677,7 +754,7 @@ pub fn main() !void {
         }
 
         game.nextTurn();
-        game_status = game.checkForWin();
+        game_status = game.board.checkForWin(game.turn);
     }
 
     try app.printEndScreen(&game, game_status);
@@ -714,7 +791,7 @@ test "win_x" {
     for (boards) |board| {
         g.board.x = board;
 
-        try std.testing.expectEqual(WinState.X, g.checkForWin());
+        try std.testing.expectEqual(WinState.X, g.board.checkForWin(g.turn));
     }
 }
 
@@ -725,7 +802,7 @@ test "win_o" {
     for (boards) |board| {
         g.board.o = board;
 
-        try std.testing.expectEqual(WinState.O, g.checkForWin());
+        try std.testing.expectEqual(WinState.O, g.board.checkForWin(g.turn));
     }
 }
 
@@ -742,7 +819,7 @@ test "tie_game" {
     for (boards) |board| {
         g.board = board;
 
-        try std.testing.expectEqual(WinState.Tie, g.checkForWin());
+        try std.testing.expectEqual(WinState.Tie, g.board.checkForWin(g.turn));
     }
 }
 
