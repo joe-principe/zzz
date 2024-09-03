@@ -104,7 +104,7 @@ const Board = struct {
 
     // Note: << operator is borked rn (zig 0.13.0), use std.math.shl
 
-    fn checkForWin(self: *Self, turn: u8) WinState {
+    fn checkForWin(self: *const Self, turn: u8) WinState {
         const winning_boards = [_]u9{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
 
         for (winning_boards) |board| {
@@ -120,7 +120,7 @@ const Board = struct {
         return WinState.None;
     }
 
-    fn isPositionOccupied(self: *Self, pos: u8) bool {
+    fn isPositionOccupied(self: *const Self, pos: u8) bool {
         const x_empty: bool = (self.x & std.math.shl(u9, 1, 8 - pos)) == 0;
         const o_empty: bool = (self.o & std.math.shl(u9, 1, 8 - pos)) == 0;
 
@@ -152,7 +152,7 @@ const Board = struct {
         return b;
     }
 
-    fn getLegalMoves(self: *Self, slice: *[9]u8) usize {
+    fn getLegalMoves(self: *const Self, slice: *[9]u8) usize {
         var i: u8 = 0;
         var j: u8 = 0;
 
@@ -632,7 +632,7 @@ fn getMediumMove(game: *Game) u8 {
 }
 
 fn getMinimaxMove(game: *Game) u8 {
-    var best_score: i8 = -11;
+    var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
     var num_best: usize = 0;
 
@@ -649,7 +649,7 @@ fn getMinimaxMove(game: *Game) u8 {
     for (0..num_legal) |i| {
         prediction_board.placeMark(game.current_player, legal_moves[i]);
 
-        const score: i8 = minimaxScore(&prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
+        const score: f32 = minimaxScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
 
         if (score > best_score) {
             // If we found a new best move, reset the number of best moves
@@ -679,13 +679,13 @@ fn getMinimaxMove(game: *Game) u8 {
 }
 
 fn minimaxScore(
-    board: *Board,
+    board: Board,
     player_to_move: Mark,
     player_to_optimize: Mark,
     turn: u8,
-) i8 {
-    var max_score: i8 = -10;
-    var min_score: i8 = 10;
+) f32 {
+    var max_score: f32 = -std.math.inf(f32);
+    var min_score: f32 = std.math.inf(f32);
 
     const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
@@ -700,12 +700,12 @@ fn minimaxScore(
     var legal_moves: [9]u8 = undefined;
     const num_legal = board.getLegalMoves(&legal_moves);
 
-    var prediction_board: Board = .{ .x = board.x, .o = board.o };
+    var prediction_board: Board = board;
 
     for (0..num_legal) |i| {
         prediction_board.placeMark(player_to_move, legal_moves[i]);
 
-        const score: i8 = minimaxScore(&prediction_board, opponent, player_to_optimize, turn + 1);
+        const score: f32 = minimaxScore(prediction_board, opponent, player_to_optimize, turn + 1);
 
         if (score > max_score) max_score = score;
         if (score < min_score) min_score = score;
@@ -723,14 +723,14 @@ fn minimaxScore(
 }
 
 fn getABPruningMove(game: *Game) u8 {
-    var best_score: i8 = -11;
+    var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
     var num_best: usize = 0;
 
-    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
+    const alpha = -std.math.inf(f32);
+    const beta = std.math.inf(f32);
 
-    var alpha: i8 = -10;
-    var beta: i8 = 10;
+    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
 
     var legal_moves: [9]u8 = undefined;
     const num_legal = game.board.getLegalMoves(&legal_moves);
@@ -743,7 +743,7 @@ fn getABPruningMove(game: *Game) u8 {
     for (0..num_legal) |i| {
         prediction_board.placeMark(game.current_player, legal_moves[i]);
 
-        const score: i8 = ABPruningScore(&prediction_board, &alpha, &beta, true, opponent, game.current_player, @truncate(11 - num_legal));
+        const score: f32 = ABPruningScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal), alpha, beta);
 
         if (score > best_score) {
             // If we found a new best move, reset the number of best moves
@@ -773,42 +773,48 @@ fn getABPruningMove(game: *Game) u8 {
 }
 
 fn ABPruningScore(
-    board: *Board,
-    alpha: *i8,
-    beta: *i8,
-    maximizing_player: bool,
-    maximizer: Mark,
-    minimizer: Mark,
+    board: Board,
+    player_to_move: Mark,
+    player_to_optimize: Mark,
     turn: u8,
-) i8 {
-    var max_score: i8 = -10;
-    var min_score: i8 = 10;
+    a: f32,
+    b: f32,
+) f32 {
+    var max_score: f32 = -std.math.inf(f32);
+    var min_score: f32 = std.math.inf(f32);
+
+    var alpha: f32 = a;
+    var beta: f32 = b;
+
+    const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
     const status = board.checkForWin(turn);
     switch (status) {
         WinState.None => {},
         WinState.Tie => return 0,
-        else => if (maximizing_player) return 10 else return -10,
+        WinState.X => if (player_to_optimize == Mark.X) return 10 else return -10,
+        WinState.O => if (player_to_optimize == Mark.O) return 10 else return -10,
     }
 
     var legal_moves: [9]u8 = undefined;
     const num_legal = board.getLegalMoves(&legal_moves);
 
-    var prediction_board: Board = .{ .x = board.x, .o = board.o };
+    var prediction_board: Board = board;
 
-    if (maximizing_player) {
+    if (player_to_move == player_to_optimize) {
         for (0..num_legal) |i| {
-            prediction_board.placeMark(maximizer, legal_moves[i]);
+            prediction_board.placeMark(player_to_move, legal_moves[i]);
 
-            const score: i8 = ABPruningScore(&prediction_board, alpha, beta, false, minimizer, maximizer, turn + 1);
+            const score: f32 = ABPruningScore(prediction_board, opponent, player_to_optimize, turn + 1, alpha, beta);
 
-            if (score >= max_score) max_score = score;
-            if (score >= alpha.*) alpha.* = score;
+            max_score = @max(max_score, score);
 
-            if (beta.* <= alpha.*) break;
+            if (max_score > beta) break;
+
+            alpha = @max(alpha, min_score);
 
             // Clear the mark we just placed before the next loop iteration
-            if (maximizer == Mark.X) {
+            if (player_to_move == Mark.X) {
                 prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
             } else {
                 prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
@@ -817,17 +823,18 @@ fn ABPruningScore(
         return max_score;
     } else {
         for (0..num_legal) |i| {
-            prediction_board.placeMark(minimizer, legal_moves[i]);
+            prediction_board.placeMark(player_to_move, legal_moves[i]);
 
-            const score: i8 = ABPruningScore(&prediction_board, alpha, beta, true, minimizer, maximizer, turn + 1);
+            const score: f32 = ABPruningScore(prediction_board, opponent, player_to_optimize, turn + 1, alpha, beta);
 
-            if (score <= min_score) min_score = score;
-            if (score <= beta.*) beta.* = score;
+            min_score = @min(min_score, score);
 
-            if (beta.* <= alpha.*) break;
+            if (min_score < alpha) break;
+
+            beta = @min(beta, min_score);
 
             // Clear the mark we just placed before the next loop iteration
-            if (minimizer == Mark.X) {
+            if (player_to_move == Mark.X) {
                 prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
             } else {
                 prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
@@ -885,9 +892,6 @@ pub fn main() !void {
                     //     break 0;
                     // },
                     // .FastCache => {
-                    //     break 0;
-                    // },
-                    // .ABPruning => {
                     //     break 0;
                     // },
                     // .PreCache => {
