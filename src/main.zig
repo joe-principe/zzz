@@ -8,6 +8,8 @@ const left_keys: [4]u21 = .{ 'a', 'h', vaxis.Key.left, vaxis.Key.kp_left };
 const right_keys: [4]u21 = .{ 'd', 'l', vaxis.Key.right, vaxis.Key.kp_right };
 const select_keys: [3]u21 = .{ vaxis.Key.enter, vaxis.Key.kp_enter, vaxis.Key.space };
 
+var rnd: std.rand.Xoshiro256 = undefined;
+
 const Mark = enum(u1) {
     X,
     O,
@@ -551,8 +553,6 @@ fn getEasyMove(game: *Game) u8 {
     var legal_moves: [9]u8 = undefined;
     const num_legal = game.board.getLegalMoves(&legal_moves);
 
-    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-    var rnd = std.rand.DefaultPrng.init(seed);
     const num = rnd.random().uintLessThan(usize, num_legal);
 
     return legal_moves[num];
@@ -671,8 +671,6 @@ fn getMinimaxMove(game: *Game) u8 {
         }
     }
 
-    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-    var rnd = std.rand.DefaultPrng.init(seed);
     const num = rnd.random().uintLessThan(usize, num_best);
 
     return best_pos[num];
@@ -765,8 +763,6 @@ fn getABPruningMove(game: *Game) u8 {
         }
     }
 
-    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
-    var rnd = std.rand.DefaultPrng.init(seed);
     const num = rnd.random().uintLessThan(usize, num_best);
 
     return best_pos[num];
@@ -845,6 +841,9 @@ fn ABPruningScore(
 }
 
 pub fn main() !void {
+    const seed: u64 = @truncate(@as(u128, @bitCast(std.time.nanoTimestamp())));
+    rnd = std.rand.DefaultPrng.init(seed);
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
         const deinit_status = gpa.deinit();
