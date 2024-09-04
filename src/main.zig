@@ -9,6 +9,8 @@ const right_keys: [4]u21 = .{ 'd', 'l', vaxis.Key.right, vaxis.Key.kp_right };
 const select_keys: [3]u21 = .{ vaxis.Key.enter, vaxis.Key.kp_enter, vaxis.Key.space };
 
 var rnd: std.rand.Xoshiro256 = undefined;
+var cache: std.AutoHashMap(Board, WinState) = undefined;
+var fast_cache: std.AutoHashMap(Board, WinState) = undefined;
 
 const Mark = enum(u1) {
     X,
@@ -720,6 +722,135 @@ fn minimaxScore(
     return min_score;
 }
 
+fn getCacheMove(game: *Game) !u8 {
+    var best_score: f32 = -std.math.inf(f32);
+    var best_pos: [9]u8 = undefined;
+    var num_best: usize = 0;
+
+    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = game.board.getLegalMoves(&legal_moves);
+
+    // If there is only one legal move, just make it
+    if (num_legal == 1) return legal_moves[0];
+
+    var prediction_board: Board = game.board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(game.current_player, legal_moves[i]);
+
+        var score: f32 = undefined;
+        var result: WinState = undefined;
+
+        if (!cache.contains(prediction_board)) {
+            score = try cacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
+            result = scoreToResult(score, game.current_player);
+            try cache.put(prediction_board, result);
+        } else {
+            result = cache.get(prediction_board) orelse unreachable;
+            score = resultToScore(result, game.current_player);
+        }
+
+        if (score > best_score) {
+            // If we found a new best move, reset the number of best moves
+            // Then add this move to the start of the list
+            num_best = 0;
+            best_pos[num_best] = legal_moves[i];
+            best_score = score;
+            num_best += 1;
+        } else if (score == best_score) {
+            best_pos[num_best] = legal_moves[i];
+            num_best += 1;
+        }
+
+        // Clear the mark we just placed before the next loop iteration
+        if (game.current_player == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    const num = rnd.random().uintLessThan(usize, num_best);
+
+    return best_pos[num];
+}
+
+fn cacheScore(
+    board: Board,
+    player_to_move: Mark,
+    player_to_optimize: Mark,
+    turn: u8,
+) !f32 {
+    var max_score: f32 = -std.math.inf(f32);
+    var min_score: f32 = std.math.inf(f32);
+
+    const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
+
+    const status = board.checkForWin(turn);
+    switch (status) {
+        WinState.None => {},
+        WinState.Tie => return 0,
+        WinState.X => if (player_to_optimize == Mark.X) return 10 else return -10,
+        WinState.O => if (player_to_optimize == Mark.O) return 10 else return -10,
+    }
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = board.getLegalMoves(&legal_moves);
+
+    var prediction_board: Board = board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(player_to_move, legal_moves[i]);
+
+        var score: f32 = undefined;
+        var result: WinState = undefined;
+
+        if (!cache.contains(prediction_board)) {
+            score = try cacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
+            result = scoreToResult(score, player_to_move);
+            try cache.put(prediction_board, result);
+        } else {
+            result = cache.get(prediction_board) orelse unreachable;
+            score = resultToScore(result, player_to_move);
+        }
+
+        if (score > max_score) max_score = score;
+        if (score < min_score) min_score = score;
+
+        // Clear the mark we just placed before the next loop iteration
+        if (player_to_move == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    if (player_to_move == player_to_optimize) return max_score;
+    return min_score;
+}
+
+fn scoreToResult(score: f32, player: Mark) WinState {
+    if (score == 10) {
+        return if (player == Mark.X) WinState.X else WinState.O;
+    } else if (score == -10) {
+        return if (player == Mark.X) WinState.O else WinState.X;
+    }
+
+    return WinState.Tie;
+}
+
+fn resultToScore(result: WinState, player: Mark) f32 {
+    if ((result == WinState.X and player == Mark.X) or (result == WinState.O and player == Mark.O)) {
+        return 10;
+    } else if ((result == WinState.X and player == Mark.O) or (result == WinState.O and player == Mark.X)) {
+        return -10;
+    }
+
+    return 0;
+}
+
 fn getABPruningMove(game: *Game) u8 {
     var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
@@ -859,15 +990,22 @@ pub fn main() !void {
 
     var game: Game = Game.init();
 
-    try app.setPlayer(&game, 0);
-    if (game.players[0] == PlayerType.Computer) {
-        try app.setBotDifficulty(&game, 0);
-    }
+    var i: u8 = 0;
+    while (i < 2) : (i += 1) {
+        try app.setPlayer(&game, i);
 
-    try app.setPlayer(&game, 1);
-    if (game.players[1] == PlayerType.Computer) {
-        try app.setBotDifficulty(&game, 1);
+        if (game.players[i] == PlayerType.Computer) {
+            try app.setBotDifficulty(&game, i);
+
+            if (game.players[i].Computer == BotDifficulty.Cache) {
+                cache = std.AutoHashMap(Board, WinState).init(allocator);
+            } else if (game.players[i].Computer == BotDifficulty.FastCache) {
+                fast_cache = std.AutoHashMap(Board, WinState).init(allocator);
+            }
+        }
     }
+    defer cache.deinit();
+    defer fast_cache.deinit();
 
     var game_status: WinState = WinState.None;
     while (game_status == WinState.None) {
@@ -885,11 +1023,13 @@ pub fn main() !void {
                     .Easy => pos = getEasyMove(&game),
                     .Medium => pos = getMediumMove(&game),
                     .Minimax => pos = getMinimaxMove(&game),
+                    .Cache => {
+                        if (getCacheMove(&game)) |val| {
+                            pos = val;
+                        } else |_| return;
+                    },
                     .ABPruning => pos = getABPruningMove(&game),
                     else => pos = getMinimaxMove(&game),
-                    // .Cache => {
-                    //     break 0;
-                    // },
                     // .FastCache => {
                     //     break 0;
                     // },
