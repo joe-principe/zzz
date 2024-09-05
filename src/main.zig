@@ -9,8 +9,8 @@ const right_keys: [4]u21 = .{ 'd', 'l', vaxis.Key.right, vaxis.Key.kp_right };
 const select_keys: [3]u21 = .{ vaxis.Key.enter, vaxis.Key.kp_enter, vaxis.Key.space };
 
 var rnd: std.rand.Xoshiro256 = undefined;
-var cache: std.AutoHashMap(Board, WinState) = undefined;
-var fast_cache: std.AutoHashMap(Board, WinState) = undefined;
+var cache: [2]std.AutoHashMap(Board, WinState) = undefined;
+var fast_cache: [2]std.AutoHashMap(Board, WinState) = undefined;
 
 const Mark = enum(u1) {
     X,
@@ -48,7 +48,6 @@ const BotDifficulty = enum(u3) {
     Cache,
     FastCache,
     ABPruning,
-    PreCache,
 
     comptime {
         for (0..std.enums.values(PlayerType).len) |i| {
@@ -743,12 +742,12 @@ fn getCacheMove(game: *Game) !u8 {
         var score: f32 = undefined;
         var result: WinState = undefined;
 
-        if (!cache.contains(prediction_board)) {
+        if (!cache[@intFromEnum(game.current_player)].contains(prediction_board)) {
             score = try cacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
             result = scoreToResult(score, game.current_player);
-            try cache.put(prediction_board, result);
+            try cache[@intFromEnum(game.current_player)].put(prediction_board, result);
         } else {
-            result = cache.get(prediction_board) orelse unreachable;
+            result = cache[@intFromEnum(game.current_player)].get(prediction_board) orelse unreachable;
             score = resultToScore(result, game.current_player);
         }
 
@@ -807,12 +806,12 @@ fn cacheScore(
         var score: f32 = undefined;
         var result: WinState = undefined;
 
-        if (!cache.contains(prediction_board)) {
+        if (!cache[@intFromEnum(player_to_optimize)].contains(prediction_board)) {
             score = try cacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
             result = scoreToResult(score, player_to_move);
-            try cache.put(prediction_board, result);
+            try cache[@intFromEnum(player_to_optimize)].put(prediction_board, result);
         } else {
-            result = cache.get(prediction_board) orelse unreachable;
+            result = cache[@intFromEnum(player_to_optimize)].get(prediction_board) orelse unreachable;
             score = resultToScore(result, player_to_move);
         }
 
@@ -852,17 +851,17 @@ fn getFastCacheMove(game: *Game) !u8 {
         var score: f32 = undefined;
         var result: WinState = undefined;
 
-        if (!fast_cache.contains(prediction_board)) {
+        if (!fast_cache[@intFromEnum(game.current_player)].contains(prediction_board)) {
             score = try fastCacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
             result = scoreToResult(score, game.current_player);
 
-            try fast_cache.put(prediction_board, result);
+            try fast_cache[@intFromEnum(game.current_player)].put(prediction_board, result);
 
             for (getEquivalentRotatedBoards(prediction_board)) |b| {
-                try fast_cache.put(b, result);
+                try fast_cache[@intFromEnum(game.current_player)].put(b, result);
             }
         } else {
-            result = fast_cache.get(prediction_board) orelse unreachable;
+            result = fast_cache[@intFromEnum(game.current_player)].get(prediction_board) orelse unreachable;
             score = resultToScore(result, game.current_player);
         }
 
@@ -921,17 +920,17 @@ fn fastCacheScore(
         var score: f32 = undefined;
         var result: WinState = undefined;
 
-        if (!fast_cache.contains(prediction_board)) {
+        if (!fast_cache[@intFromEnum(player_to_optimize)].contains(prediction_board)) {
             score = try fastCacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
             result = scoreToResult(score, player_to_move);
 
-            try fast_cache.put(prediction_board, result);
+            try fast_cache[@intFromEnum(player_to_optimize)].put(prediction_board, result);
 
             for (getEquivalentRotatedBoards(prediction_board)) |b| {
-                try fast_cache.put(b, result);
+                try fast_cache[@intFromEnum(player_to_optimize)].put(b, result);
             }
         } else {
-            result = fast_cache.get(prediction_board) orelse unreachable;
+            result = fast_cache[@intFromEnum(player_to_optimize)].get(prediction_board) orelse unreachable;
             score = resultToScore(result, player_to_move);
         }
 
@@ -1146,14 +1145,16 @@ pub fn main() !void {
             try app.setBotDifficulty(&game, i);
 
             if (game.players[i].Computer == BotDifficulty.Cache) {
-                cache = std.AutoHashMap(Board, WinState).init(allocator);
+                cache[i] = std.AutoHashMap(Board, WinState).init(allocator);
             } else if (game.players[i].Computer == BotDifficulty.FastCache) {
-                fast_cache = std.AutoHashMap(Board, WinState).init(allocator);
+                fast_cache[i] = std.AutoHashMap(Board, WinState).init(allocator);
             }
         }
     }
-    defer cache.deinit();
-    defer fast_cache.deinit();
+    defer cache[0].deinit();
+    defer cache[1].deinit();
+    defer fast_cache[0].deinit();
+    defer fast_cache[1].deinit();
 
     var game_status: WinState = WinState.None;
     while (game_status == WinState.None) {
@@ -1182,10 +1183,6 @@ pub fn main() !void {
                         } else |_| return;
                     },
                     .ABPruning => pos = getABPruningMove(&game),
-                    else => pos = getMinimaxMove(&game),
-                    // .PreCache => {
-                    //     break 0;
-                    // },
                 }
             },
         }
