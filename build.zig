@@ -4,11 +4,36 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const ai_module = b.createModule(.{
+        .root_source_file = b.path("src/ai.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const tui_module = b.createModule(.{
+        .root_source_file = b.path("src/tui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const game_module = b.createModule(.{
+        .root_source_file = b.path("src/game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Add libvaxis module dependency
     const libvaxis = b.dependency("vaxis", .{
         .target = target,
         .optimize = optimize,
     });
+
+    ai_module.addImport("game", game_module);
+
+    tui_module.addImport("vaxis", libvaxis.module("vaxis"));
+    tui_module.addImport("game", game_module);
+
+    game_module.addImport("ai", ai_module);
 
     const exe = b.addExecutable(.{
         .name = "zzz",
@@ -16,7 +41,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addImport("vaxis", libvaxis.module("vaxis"));
+    exe.root_module.addImport("ai", ai_module);
+    exe.root_module.addImport("tui", tui_module);
+    exe.root_module.addImport("game", game_module);
 
     b.installArtifact(exe);
 
