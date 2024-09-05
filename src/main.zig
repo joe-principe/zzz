@@ -942,7 +942,7 @@ fn getFastCacheMove(game: *Game) !u8 {
             }
         } else {
             result = fast_cache[player_num].get(prediction_board) orelse unreachable;
-            score = WinState.scoreFromWinState(result, game.current_player);
+            score = WinState.winStateToScore(result, game.current_player);
         }
 
         if (score > best_score) {
@@ -1231,7 +1231,7 @@ pub fn main() !void {
                 if (app.getLocalMove(&game)) |val| {
                     pos = val;
                 } else |err| {
-                    std.log.err("Error: {s}\n", .{err});
+                    std.log.err("Error: {}\n", .{err});
                     return;
                 }
             },
@@ -1244,7 +1244,7 @@ pub fn main() !void {
                         if (getCacheMove(&game)) |val| {
                             pos = val;
                         } else |err| {
-                            std.log.err("Error: {s}\n", .{err});
+                            std.log.err("Error: {}\n", .{err});
                             return;
                         }
                     },
@@ -1252,7 +1252,7 @@ pub fn main() !void {
                         if (getFastCacheMove(&game)) |val| {
                             pos = val;
                         } else |err| {
-                            std.log.err("Error: {s}\n", .{err});
+                            std.log.err("Error: {}\n", .{err});
                             return;
                         }
                     },
