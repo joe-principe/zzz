@@ -831,6 +831,125 @@ fn cacheScore(
     return min_score;
 }
 
+fn getFastCacheMove(game: *Game) !u8 {
+    var best_score: f32 = -std.math.inf(f32);
+    var best_pos: [9]u8 = undefined;
+    var num_best: usize = 0;
+
+    const opponent = if (game.current_player == Mark.X) Mark.O else Mark.X;
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = game.board.getLegalMoves(&legal_moves);
+
+    // If there is only one legal move, just make it
+    if (num_legal == 1) return legal_moves[0];
+
+    var prediction_board: Board = game.board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(game.current_player, legal_moves[i]);
+
+        var score: f32 = undefined;
+        var result: WinState = undefined;
+
+        if (!fast_cache.contains(prediction_board)) {
+            score = try fastCacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
+            result = scoreToResult(score, game.current_player);
+
+            try fast_cache.put(prediction_board, result);
+
+            for (getEquivalentRotatedBoards(prediction_board)) |b| {
+                try fast_cache.put(b, result);
+            }
+        } else {
+            result = fast_cache.get(prediction_board) orelse unreachable;
+            score = resultToScore(result, game.current_player);
+        }
+
+        if (score > best_score) {
+            // If we found a new best move, reset the number of best moves
+            // Then add this move to the start of the list
+            num_best = 0;
+            best_pos[num_best] = legal_moves[i];
+            best_score = score;
+            num_best += 1;
+        } else if (score == best_score) {
+            best_pos[num_best] = legal_moves[i];
+            num_best += 1;
+        }
+
+        // Clear the mark we just placed before the next loop iteration
+        if (game.current_player == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    const num = rnd.random().uintLessThan(usize, num_best);
+
+    return best_pos[num];
+}
+
+fn fastCacheScore(
+    board: Board,
+    player_to_move: Mark,
+    player_to_optimize: Mark,
+    turn: u8,
+) !f32 {
+    var max_score: f32 = -std.math.inf(f32);
+    var min_score: f32 = std.math.inf(f32);
+
+    const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
+
+    const status = board.checkForWin(turn);
+    switch (status) {
+        WinState.None => {},
+        WinState.Tie => return 0,
+        WinState.X => if (player_to_optimize == Mark.X) return 10 else return -10,
+        WinState.O => if (player_to_optimize == Mark.O) return 10 else return -10,
+    }
+
+    var legal_moves: [9]u8 = undefined;
+    const num_legal = board.getLegalMoves(&legal_moves);
+
+    var prediction_board: Board = board;
+
+    for (0..num_legal) |i| {
+        prediction_board.placeMark(player_to_move, legal_moves[i]);
+
+        var score: f32 = undefined;
+        var result: WinState = undefined;
+
+        if (!fast_cache.contains(prediction_board)) {
+            score = try fastCacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
+            result = scoreToResult(score, player_to_move);
+
+            try fast_cache.put(prediction_board, result);
+
+            for (getEquivalentRotatedBoards(prediction_board)) |b| {
+                try fast_cache.put(b, result);
+            }
+        } else {
+            result = fast_cache.get(prediction_board) orelse unreachable;
+            score = resultToScore(result, player_to_move);
+        }
+
+        if (score > max_score) max_score = score;
+        if (score < min_score) min_score = score;
+
+        // Clear the mark we just placed before the next loop iteration
+        if (player_to_move == Mark.X) {
+            prediction_board.x ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        } else {
+            prediction_board.o ^= std.math.shl(u9, 1, 8 - legal_moves[i]);
+        }
+    }
+
+    if (player_to_move == player_to_optimize) return max_score;
+    return min_score;
+}
+
 fn scoreToResult(score: f32, player: Mark) WinState {
     if (score == 10) {
         return if (player == Mark.X) WinState.X else WinState.O;
@@ -849,6 +968,35 @@ fn resultToScore(result: WinState, player: Mark) f32 {
     }
 
     return 0;
+}
+
+fn getEquivalentRotatedBoards(board: Board) [3]Board {
+    const mask_left: u9 = 0b100_100_100;
+    const mask_center: u9 = 0b010_010_010;
+    const mask_right: u9 = 0b001_001_001;
+
+    const mask_top: u9 = 0b111_000_000;
+    const mask_middle: u9 = 0b000_111_000;
+    const mask_bottom: u9 = 0b000_000_111;
+
+    var boards: [3]Board = undefined;
+
+    // Horizontal flip == rotating the board by 90deg CCW
+    boards[0].x = ((board.x & mask_left) >> 2) | ((board.x & mask_right) << 2) | (board.x & mask_center);
+    boards[0].o = ((board.o & mask_left) >> 2) | ((board.o & mask_right) << 2) | (board.o & mask_center);
+
+    // Horizontal + vertical flip == rotating the board by 180deg
+    boards[1].x = ((board.x & mask_left) >> 2) | ((board.x & mask_right) << 2) | (board.x & mask_center);
+    boards[1].x = ((board.x & mask_top) >> 6) | ((board.x & mask_bottom) << 6) | (board.x & mask_middle);
+
+    boards[1].o = ((board.o & mask_left) >> 2) | ((board.o & mask_right) << 2) | (board.o & mask_center);
+    boards[1].o = ((board.o & mask_top) >> 6) | ((board.o & mask_bottom) << 6) | (board.o & mask_middle);
+
+    // Vertical flip == rotating the board by 270deg CCW
+    boards[2].x = ((board.x & mask_top) >> 6) | ((board.x & mask_bottom) << 6) | (board.x & mask_middle);
+    boards[2].o = ((board.o & mask_top) >> 6) | ((board.o & mask_bottom) << 6) | (board.o & mask_middle);
+
+    return boards;
 }
 
 fn getABPruningMove(game: *Game) u8 {
@@ -1028,11 +1176,13 @@ pub fn main() !void {
                             pos = val;
                         } else |_| return;
                     },
+                    .FastCache => {
+                        if (getFastCacheMove(&game)) |val| {
+                            pos = val;
+                        } else |_| return;
+                    },
                     .ABPruning => pos = getABPruningMove(&game),
                     else => pos = getMinimaxMove(&game),
-                    // .FastCache => {
-                    //     break 0;
-                    // },
                     // .PreCache => {
                     //     break 0;
                     // },
