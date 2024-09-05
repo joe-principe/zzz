@@ -9,11 +9,20 @@ const right_keys: [4]u21 = .{ 'd', 'l', vaxis.Key.right, vaxis.Key.kp_right };
 const select_keys: [3]u21 = .{ vaxis.Key.enter, vaxis.Key.kp_enter, vaxis.Key.space };
 
 var rnd: std.rand.Xoshiro256 = undefined;
+
+// Two caches each because when both bots were the same type of cache bot, the
+// second player would misinterpret the result and play its worst moves. I could
+// probably fix that in code, but I didn't want to spend a bunch of time
+// debugging when I could just do this
 var cache: [2]std.AutoHashMap(Board, WinState) = undefined;
 var fast_cache: [2]std.AutoHashMap(Board, WinState) = undefined;
 
+/// The marks that can be placed on the board.
 const Mark = enum(u1) {
+    /// Player One
     X,
+
+    /// Player Two
     O,
 
     comptime {
@@ -24,13 +33,24 @@ const Mark = enum(u1) {
     }
 };
 
+/// The player type stored by the game struct
+// This is done as a union so that the computer player can have a difficulty
+// associated with it. There might be a better way to do this, but I'm not aware
+// of it
 const Player = union(PlayerType) {
+    /// Human player
     Local,
+
+    /// Computer player and associated difficulty
     Computer: BotDifficulty,
 };
 
+/// The types of players
 const PlayerType = enum(u1) {
+    /// Human playing at the computer
     Local,
+
+    /// Computer player
     Computer,
 
     comptime {
@@ -41,12 +61,33 @@ const PlayerType = enum(u1) {
     }
 };
 
+/// The difficulty level of the computer player
 const BotDifficulty = enum(u3) {
+    /// Easiest difficulty. Makes random, legal moves
     Easy,
+
+    /// Medium difficulty. Makes random, legal moves unless there is a winning
+    /// move available
     Medium,
+
+    /// Hard difficulty. Uses the minimax algorithm to find its best possible
+    /// moves and randomly selects one
     Minimax,
+
+    /// Hard difficulty. Uses the minimax algorithm to find its best possible
+    /// moves and randomly selects one. A hashmap is used to store the results
+    /// of each board so the algorithm does not have to be re-run for each move
     Cache,
+
+    /// Hard difficulty. Uses the minimax algorithm to find its best possible
+    /// moves and randomly selects one. A hashmap is used to store the results
+    /// of each board so the algorithm does not have to be re-run for each move.
+    /// Boards are rotated to get equivalent boards, reducing the amount of
+    /// caching needed
     FastCache,
+
+    /// Hard difficulty. Uses the minimax algorithm with alpha-beta pruning to
+    /// find its best moves and randomly selects one.
     ABPruning,
 
     comptime {
@@ -57,35 +98,43 @@ const BotDifficulty = enum(u3) {
     }
 };
 
+/// The current result state of the board
 const WinState = enum(u2) {
+    /// Nobody has won the game
     None,
+
+    /// Player one has won the game
     X,
+
+    /// Player two has won the game
     O,
+
+    /// The game is tied
     Tie,
 
+    /// Converts a minimax score into a WinState
     fn scoreToWinState(
-        score: i8,
+        score: f32,
         player: Mark,
-        opponent: Mark,
     ) WinState {
         if (score == 10) {
             if (player == Mark.X) return WinState.X else return WinState.O;
         } else if (score == -10) {
-            if (opponent == Mark.X) return WinState.O else return WinState.X;
+            if (player == Mark.X) return WinState.O else return WinState.X;
         }
 
         return WinState.Tie;
     }
 
-    fn scoreFromWinState(
+    /// Converts a WinState into a minimax score
+    fn winStateToScore(
         result: WinState,
         player: Mark,
-        opponent: Mark,
-    ) i8 {
-        if (result == WinState.X) {
-            if (player == Mark.X) return 10 else return -10;
-        } else if (result == WinState.O) {
-            if (opponent == Mark.O) return -10 else return 10;
+    ) f32 {
+        if ((result == WinState.X and player == Mark.X) or (result == WinState.O and player == Mark.O)) {
+            return 10;
+        } else if ((result == WinState.X and player == Mark.O) or (result == WinState.O and player == Mark.X)) {
+            return -10;
         }
 
         return 0;
@@ -99,15 +148,22 @@ const WinState = enum(u2) {
     }
 };
 
+/// The game board
+/// NOTE: Positions on the board are from 0-8, increasing first from left to
+/// right then from top to bottom. 0 is top left, 8 is bottom right.
 const Board = struct {
     const Self = @This();
 
+    /// The bit-board for player one
     x: u9,
+
+    /// The bit-board for player two
     o: u9,
 
     // Note: << operator is borked rn (zig 0.13.0), use std.math.shl
 
-    fn checkForWin(self: *const Self, turn: u8) WinState {
+    /// Gets the current WinState of the board
+    fn getWinState(self: *const Self, turn: u8) WinState {
         const winning_boards = [_]u9{ 0b111_000_000, 0b000_111_000, 0b000_000_111, 0b100_100_100, 0b010_010_010, 0b001_001_001, 0b100_010_001, 0b001_010_100 };
 
         for (winning_boards) |board| {
@@ -123,6 +179,7 @@ const Board = struct {
         return WinState.None;
     }
 
+    /// Checks if a position is occupied
     fn isPositionOccupied(self: *const Self, pos: u8) bool {
         const x_empty: bool = (self.x & std.math.shl(u9, 1, 8 - pos)) == 0;
         const o_empty: bool = (self.o & std.math.shl(u9, 1, 8 - pos)) == 0;
@@ -130,6 +187,7 @@ const Board = struct {
         return if (x_empty and o_empty) false else true;
     }
 
+    /// Places a mark at the given position
     fn placeMark(self: *Self, mark: Mark, pos: u8) void {
         switch (mark) {
             Mark.X => self.x |= std.math.shl(u9, 1, 8 - pos),
@@ -137,6 +195,7 @@ const Board = struct {
         }
     }
 
+    /// Converts the board into a string
     fn toString(self: *Self) [9]u8 {
         var b: [9]u8 = .{ ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ' };
 
@@ -155,6 +214,9 @@ const Board = struct {
         return b;
     }
 
+    /// Gets all of the legal moves
+    /// Modifies the input array to contain the legal moves
+    /// Returns the number of legal moves
     fn getLegalMoves(self: *const Self, slice: *[9]u8) usize {
         var i: u8 = 0;
         var j: u8 = 0;
@@ -170,14 +232,23 @@ const Board = struct {
     }
 };
 
+/// A container for the game state
 const Game = struct {
     const Self = @This();
 
+    /// The board
     board: Board,
+
+    /// The turn number. The game begins at turn 1 and goes upto a max of 10
     turn: u8,
+
+    /// The player whose turn it is
     current_player: Mark,
+
+    /// The types of the players
     players: [2]Player,
 
+    /// Sets the default values of the game
     fn init() Game {
         return .{
             .board = .{ .x = 0, .o = 0 },
@@ -187,36 +258,49 @@ const Game = struct {
         };
     }
 
+    /// Increments the turn number and switches players
     fn nextTurn(self: *Self) void {
         self.turn += 1;
         self.current_player = if (self.current_player == Mark.X) Mark.O else Mark.X;
     }
 };
 
+/// The possible events vaxis can receive
 const Event = union(enum) {
+    /// An input from the keyboard
     key_press: vaxis.Key,
+
+    /// Resizing the window
     winsize: vaxis.Winsize,
 };
 
+/// A container for the TUI state
 const TuiApp = struct {
     const Self = @This();
 
+    /// The memory allocator
     allocator: std.mem.Allocator,
-    should_quit: bool,
+
+    /// The teletype terminal
     tty: vaxis.Tty,
+
+    /// The vaxis struct (not sure what this is, lol)
     vx: vaxis.Vaxis,
+
+    /// The event loop
     loop: vaxis.Loop(Event),
 
+    /// Sets the default values of the TUI
     fn init(allocator: std.mem.Allocator) !TuiApp {
         return .{
             .allocator = allocator,
-            .should_quit = false,
             .tty = try vaxis.Tty.init(),
             .vx = try vaxis.init(allocator, .{}),
             .loop = undefined,
         };
     }
 
+    /// Sets the default values of the TUI event loop and starts the loop
     fn init_loop(self: *Self) !void {
         self.loop = .{
             .tty = &self.tty,
@@ -226,13 +310,15 @@ const TuiApp = struct {
         try self.loop.start();
     }
 
+    /// Stops the TUI event loop and deinitializes the TUI
     fn deinit(self: *Self) void {
         self.loop.stop();
         self.vx.deinit(self.allocator, self.tty.anyWriter());
         self.tty.deinit();
     }
 
-    fn setPlayer(
+    /// Lets the user choose the type of a player
+    fn choosePlayer(
         self: *Self,
         game: *Game,
         player: u8,
@@ -271,28 +357,22 @@ const TuiApp = struct {
             const event = self.loop.nextEvent();
             switch (event) {
                 .key_press => |key| {
-                    // Go up an option
                     if (key.matchesAny(&up_keys, .{})) {
                         selected_option -|= 1;
-                    }
-                    // Go down an option
-                    else if (key.matchesAny(&down_keys, .{})) {
+                    } else if (key.matchesAny(&down_keys, .{})) {
                         selected_option = @min(options.len - 1, selected_option + 1);
-                    }
-                    // Select an option
-                    else if (key.matchesAny(&select_keys, .{})) {
+                    } else if (key.matchesAny(&select_keys, .{})) {
                         game.players[player] = if (selected_option == 0) .Local else Player{ .Computer = undefined };
                         break;
                     }
-                    // N/A
-                    else {}
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
         }
     }
 
-    fn setBotDifficulty(
+    /// Lets the user choose the difficulty of a bot player
+    fn chooseBotDifficulty(
         self: *Self,
         game: *Game,
         player: u8,
@@ -305,7 +385,6 @@ const TuiApp = struct {
             "Cache",
             "FastCache",
             "Alpha-Beta",
-            "PreCache",
         };
 
         while (true) {
@@ -329,16 +408,11 @@ const TuiApp = struct {
             const event = self.loop.nextEvent();
             switch (event) {
                 .key_press => |key| {
-                    // Go up an option
                     if (key.matchesAny(&up_keys, .{})) {
                         selected_option -|= 1;
-                    }
-                    // Go down an option
-                    else if (key.matchesAny(&down_keys, .{})) {
+                    } else if (key.matchesAny(&down_keys, .{})) {
                         selected_option = @min(options.len - 1, selected_option + 1);
-                    }
-                    // Select an option
-                    else if (key.matchesAny(&select_keys, .{})) {
+                    } else if (key.matchesAny(&select_keys, .{})) {
                         game.players[player].Computer = @enumFromInt(selected_option);
 
                         // Have to clear here, otherwise some options will still
@@ -346,14 +420,13 @@ const TuiApp = struct {
                         win.clear();
                         break;
                     }
-                    // N/A
-                    else {}
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
         }
     }
 
+    /// Prints out the board
     fn printBoard(self: *Self, game: *Game) !void {
         const b = game.board.toString();
 
@@ -421,9 +494,15 @@ const TuiApp = struct {
         try self.vx.render(self.tty.anyWriter());
     }
 
+    /// Gets a move from a local player
     fn getLocalMove(self: *Self, game: *Game) !u8 {
         var pos: u8 = undefined;
 
+        // Static struct so that the cursor is kept in the same position in
+        // between turns. Otherwise, it'd reset to the center everytime, which
+        // is really annoying when playing
+
+        // Cursor coordinates (0, 0) is top left, (2, 2) is bottom right
         const cursor_pos = struct {
             var x: u8 = 1;
             var y: u8 = 1;
@@ -444,52 +523,50 @@ const TuiApp = struct {
                         } else {
                             cursor_pos.y -|= 1;
                         }
-                    }
-                    // Go down one square
-                    else if (key.matchesAny(&down_keys, .{})) {
+                    } else if (key.matchesAny(&down_keys, .{})) {
                         if (cursor_pos.y == 2) {
                             cursor_pos.y = 0;
                         } else {
                             cursor_pos.y += 1;
                         }
-                    }
-                    // Go left one square
-                    else if (key.matchesAny(&left_keys, .{})) {
+                    } else if (key.matchesAny(&left_keys, .{})) {
                         if (cursor_pos.x == 0) {
                             cursor_pos.x = 2;
                         } else {
                             cursor_pos.x -|= 1;
                         }
-                    }
-                    // Go right one square
-                    else if (key.matchesAny(&right_keys, .{})) {
+                    } else if (key.matchesAny(&right_keys, .{})) {
                         if (cursor_pos.x == 2) {
                             cursor_pos.x = 0;
                         } else {
                             cursor_pos.x += 1;
                         }
-                    }
-                    // Select a square
-                    else if (key.matchesAny(&select_keys, .{})) {
+                    } else if (key.matchesAny(&select_keys, .{})) {
                         pos = cursor_pos.x + 3 * cursor_pos.y;
                         if (!game.board.isPositionOccupied(pos)) {
                             game.board.placeMark(game.current_player, pos);
                             break;
                         }
                     }
-                    // N/A
-                    else {}
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
-            const cur_x = cursor_pos.x * 6 + 5;
-            const cur_y = cursor_pos.y * 4 + 5;
-            win.showCursor(cur_x, cur_y);
+
+            const initial_x = 5;
+            const initial_y = 5;
+
+            const stride_x = 6;
+            const stride_y = 4;
+
+            const cursor_screen_x = cursor_pos.x * stride_x + initial_x;
+            const cursor_screen_y = cursor_pos.y * stride_y + initial_y;
+            win.showCursor(cursor_screen_x, cursor_screen_y);
         }
 
         return pos;
     }
 
+    /// Prints the result screen
     fn printEndScreen(
         self: *Self,
         game: *Game,
@@ -521,12 +598,9 @@ const TuiApp = struct {
             const win = self.vx.window();
             win.clear();
 
-            // Tie game
             if (result == WinState.Tie) {
                 _ = try win.printSegment(tie, .{ .row_offset = 16 });
-            }
-            // Someone won
-            else {
+            } else {
                 _ = try win.printSegment(game_won, .{ .row_offset = 16 });
             }
 
@@ -538,11 +612,7 @@ const TuiApp = struct {
             const event = self.loop.nextEvent();
             switch (event) {
                 .key_press => |key| {
-                    if (key.matches(vaxis.Key.escape, .{})) {
-                        break;
-                    }
-                    // yeet
-                    else {}
+                    if (key.matches(vaxis.Key.escape, .{})) break;
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
@@ -550,6 +620,7 @@ const TuiApp = struct {
     }
 };
 
+/// Gets a move from an easy bot
 fn getEasyMove(game: *Game) u8 {
     var legal_moves: [9]u8 = undefined;
     const num_legal = game.board.getLegalMoves(&legal_moves);
@@ -559,6 +630,7 @@ fn getEasyMove(game: *Game) u8 {
     return legal_moves[num];
 }
 
+/// Gets a move from a medium bot
 fn getMediumMove(game: *Game) u8 {
     const b: [9]u8 = game.board.toString();
     const mark: u8 = if (game.current_player == Mark.X) 'X' else 'O';
@@ -632,6 +704,7 @@ fn getMediumMove(game: *Game) u8 {
     return getEasyMove(game);
 }
 
+/// Gets a move from a minimax bot
 fn getMinimaxMove(game: *Game) u8 {
     var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
@@ -677,6 +750,7 @@ fn getMinimaxMove(game: *Game) u8 {
     return best_pos[num];
 }
 
+/// Gets the score of a board (for use with getMinimaxMove)
 fn minimaxScore(
     board: Board,
     player_to_move: Mark,
@@ -688,7 +762,7 @@ fn minimaxScore(
 
     const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
-    const status = board.checkForWin(turn);
+    const status = board.getWinState(turn);
     switch (status) {
         WinState.None => {},
         WinState.Tie => return 0,
@@ -721,6 +795,7 @@ fn minimaxScore(
     return min_score;
 }
 
+/// Gets a move from a cache bot
 fn getCacheMove(game: *Game) !u8 {
     var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
@@ -741,14 +816,15 @@ fn getCacheMove(game: *Game) !u8 {
 
         var score: f32 = undefined;
         var result: WinState = undefined;
+        const player_num = @intFromEnum(game.current_player);
 
-        if (!cache[@intFromEnum(game.current_player)].contains(prediction_board)) {
+        if (!cache[player_num].contains(prediction_board)) {
             score = try cacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
-            result = scoreToResult(score, game.current_player);
-            try cache[@intFromEnum(game.current_player)].put(prediction_board, result);
+            result = WinState.scoreToWinState(score, game.current_player);
+            try cache[player_num].put(prediction_board, result);
         } else {
-            result = cache[@intFromEnum(game.current_player)].get(prediction_board) orelse unreachable;
-            score = resultToScore(result, game.current_player);
+            result = cache[player_num].get(prediction_board) orelse unreachable;
+            score = WinState.winStateToScore(result, game.current_player);
         }
 
         if (score > best_score) {
@@ -776,6 +852,7 @@ fn getCacheMove(game: *Game) !u8 {
     return best_pos[num];
 }
 
+/// Gets the score of a board (for use with a getCacheMove)
 fn cacheScore(
     board: Board,
     player_to_move: Mark,
@@ -787,7 +864,7 @@ fn cacheScore(
 
     const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
-    const status = board.checkForWin(turn);
+    const status = board.getWinState(turn);
     switch (status) {
         WinState.None => {},
         WinState.Tie => return 0,
@@ -805,14 +882,15 @@ fn cacheScore(
 
         var score: f32 = undefined;
         var result: WinState = undefined;
+        const player_num = @intFromEnum(player_to_optimize);
 
-        if (!cache[@intFromEnum(player_to_optimize)].contains(prediction_board)) {
+        if (!cache[player_num].contains(prediction_board)) {
             score = try cacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
-            result = scoreToResult(score, player_to_move);
-            try cache[@intFromEnum(player_to_optimize)].put(prediction_board, result);
+            result = WinState.scoreToWinState(score, player_to_move);
+            try cache[player_num].put(prediction_board, result);
         } else {
-            result = cache[@intFromEnum(player_to_optimize)].get(prediction_board) orelse unreachable;
-            score = resultToScore(result, player_to_move);
+            result = cache[player_num].get(prediction_board) orelse unreachable;
+            score = WinState.winStateToScore(result, player_to_move);
         }
 
         if (score > max_score) max_score = score;
@@ -830,6 +908,7 @@ fn cacheScore(
     return min_score;
 }
 
+/// Gets a move from a fast cache bot
 fn getFastCacheMove(game: *Game) !u8 {
     var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
@@ -850,19 +929,20 @@ fn getFastCacheMove(game: *Game) !u8 {
 
         var score: f32 = undefined;
         var result: WinState = undefined;
+        const player_num = @intFromEnum(game.current_player);
 
-        if (!fast_cache[@intFromEnum(game.current_player)].contains(prediction_board)) {
+        if (!fast_cache[player_num].contains(prediction_board)) {
             score = try fastCacheScore(prediction_board, opponent, game.current_player, @truncate(11 - num_legal));
-            result = scoreToResult(score, game.current_player);
+            result = WinState.scoreToWinState(score, game.current_player);
 
-            try fast_cache[@intFromEnum(game.current_player)].put(prediction_board, result);
+            try fast_cache[player_num].put(prediction_board, result);
 
             for (getEquivalentRotatedBoards(prediction_board)) |b| {
-                try fast_cache[@intFromEnum(game.current_player)].put(b, result);
+                try fast_cache[player_num].put(b, result);
             }
         } else {
-            result = fast_cache[@intFromEnum(game.current_player)].get(prediction_board) orelse unreachable;
-            score = resultToScore(result, game.current_player);
+            result = fast_cache[player_num].get(prediction_board) orelse unreachable;
+            score = WinState.scoreFromWinState(result, game.current_player);
         }
 
         if (score > best_score) {
@@ -890,6 +970,7 @@ fn getFastCacheMove(game: *Game) !u8 {
     return best_pos[num];
 }
 
+/// Gets the score of a board (for use with getFastCacheMove)
 fn fastCacheScore(
     board: Board,
     player_to_move: Mark,
@@ -901,7 +982,7 @@ fn fastCacheScore(
 
     const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
-    const status = board.checkForWin(turn);
+    const status = board.getWinState(turn);
     switch (status) {
         WinState.None => {},
         WinState.Tie => return 0,
@@ -919,19 +1000,20 @@ fn fastCacheScore(
 
         var score: f32 = undefined;
         var result: WinState = undefined;
+        const player_num = @intFromEnum(player_to_optimize);
 
-        if (!fast_cache[@intFromEnum(player_to_optimize)].contains(prediction_board)) {
+        if (!fast_cache[player_num].contains(prediction_board)) {
             score = try fastCacheScore(prediction_board, opponent, player_to_optimize, turn + 1);
-            result = scoreToResult(score, player_to_move);
+            result = WinState.scoreToWinState(score, player_to_move);
 
-            try fast_cache[@intFromEnum(player_to_optimize)].put(prediction_board, result);
+            try fast_cache[player_num].put(prediction_board, result);
 
             for (getEquivalentRotatedBoards(prediction_board)) |b| {
-                try fast_cache[@intFromEnum(player_to_optimize)].put(b, result);
+                try fast_cache[player_num].put(b, result);
             }
         } else {
-            result = fast_cache[@intFromEnum(player_to_optimize)].get(prediction_board) orelse unreachable;
-            score = resultToScore(result, player_to_move);
+            result = fast_cache[player_num].get(prediction_board) orelse unreachable;
+            score = WinState.winStateToScore(result, player_to_move);
         }
 
         if (score > max_score) max_score = score;
@@ -949,26 +1031,7 @@ fn fastCacheScore(
     return min_score;
 }
 
-fn scoreToResult(score: f32, player: Mark) WinState {
-    if (score == 10) {
-        return if (player == Mark.X) WinState.X else WinState.O;
-    } else if (score == -10) {
-        return if (player == Mark.X) WinState.O else WinState.X;
-    }
-
-    return WinState.Tie;
-}
-
-fn resultToScore(result: WinState, player: Mark) f32 {
-    if ((result == WinState.X and player == Mark.X) or (result == WinState.O and player == Mark.O)) {
-        return 10;
-    } else if ((result == WinState.X and player == Mark.O) or (result == WinState.O and player == Mark.X)) {
-        return -10;
-    }
-
-    return 0;
-}
-
+/// Gets the 3 boards that are rotationally equivalent to the input board
 fn getEquivalentRotatedBoards(board: Board) [3]Board {
     const mask_left: u9 = 0b100_100_100;
     const mask_center: u9 = 0b010_010_010;
@@ -998,6 +1061,7 @@ fn getEquivalentRotatedBoards(board: Board) [3]Board {
     return boards;
 }
 
+/// Gets a move from an alpha-beta pruning bot
 fn getABPruningMove(game: *Game) u8 {
     var best_score: f32 = -std.math.inf(f32);
     var best_pos: [9]u8 = undefined;
@@ -1046,6 +1110,7 @@ fn getABPruningMove(game: *Game) u8 {
     return best_pos[num];
 }
 
+/// Gets the score of a board (for use with getABPruningMove)
 fn ABPruningScore(
     board: Board,
     player_to_move: Mark,
@@ -1062,7 +1127,7 @@ fn ABPruningScore(
 
     const opponent = if (player_to_move == Mark.X) Mark.O else Mark.X;
 
-    const status = board.checkForWin(turn);
+    const status = board.getWinState(turn);
     switch (status) {
         WinState.None => {},
         WinState.Tie => return 0,
@@ -1139,10 +1204,10 @@ pub fn main() !void {
 
     var i: u8 = 0;
     while (i < 2) : (i += 1) {
-        try app.setPlayer(&game, i);
+        try app.choosePlayer(&game, i);
 
         if (game.players[i] == PlayerType.Computer) {
-            try app.setBotDifficulty(&game, i);
+            try app.chooseBotDifficulty(&game, i);
 
             if (game.players[i].Computer == BotDifficulty.Cache) {
                 cache[i] = std.AutoHashMap(Board, WinState).init(allocator);
@@ -1165,7 +1230,10 @@ pub fn main() !void {
             .Local => {
                 if (app.getLocalMove(&game)) |val| {
                     pos = val;
-                } else |_| return;
+                } else |err| {
+                    std.log.err("Error: {s}\n", .{err});
+                    return;
+                }
             },
             .Computer => |difficulty| {
                 switch (difficulty) {
@@ -1175,12 +1243,18 @@ pub fn main() !void {
                     .Cache => {
                         if (getCacheMove(&game)) |val| {
                             pos = val;
-                        } else |_| return;
+                        } else |err| {
+                            std.log.err("Error: {s}\n", .{err});
+                            return;
+                        }
                     },
                     .FastCache => {
                         if (getFastCacheMove(&game)) |val| {
                             pos = val;
-                        } else |_| return;
+                        } else |err| {
+                            std.log.err("Error: {s}\n", .{err});
+                            return;
+                        }
                     },
                     .ABPruning => pos = getABPruningMove(&game),
                 }
@@ -1195,7 +1269,7 @@ pub fn main() !void {
         }
 
         game.nextTurn();
-        game_status = game.board.checkForWin(game.turn);
+        game_status = game.board.getWinState(game.turn);
     }
 
     try app.printEndScreen(&game, game_status);
@@ -1232,7 +1306,7 @@ test "win_x" {
     for (boards) |board| {
         g.board.x = board;
 
-        try std.testing.expectEqual(WinState.X, g.board.checkForWin(g.turn));
+        try std.testing.expectEqual(WinState.X, g.board.getWinState(g.turn));
     }
 }
 
@@ -1243,7 +1317,7 @@ test "win_o" {
     for (boards) |board| {
         g.board.o = board;
 
-        try std.testing.expectEqual(WinState.O, g.board.checkForWin(g.turn));
+        try std.testing.expectEqual(WinState.O, g.board.getWinState(g.turn));
     }
 }
 
@@ -1260,7 +1334,7 @@ test "tie_game" {
     for (boards) |board| {
         g.board = board;
 
-        try std.testing.expectEqual(WinState.Tie, g.board.checkForWin(g.turn));
+        try std.testing.expectEqual(WinState.Tie, g.board.getWinState(g.turn));
     }
 }
 
