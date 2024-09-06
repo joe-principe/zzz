@@ -28,6 +28,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add raylib module dependency
+    const raylib_dep = b.dependency("raylib-zig", .{ .target = target, .optimize = optimize });
+
+    const raylib_module = raylib_dep.module("raylib");
+    const raygui_module = raylib_dep.module("raygui");
+    const raylib_artifact = raylib_dep.artifact("raylib");
+
     ai_module.addImport("game", game_module);
 
     tui_module.addImport("vaxis", libvaxis.module("vaxis"));
@@ -41,9 +48,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "gui", b.option(bool, "gui", "Uses gui mode") orelse false);
+
     exe.root_module.addImport("ai", ai_module);
     exe.root_module.addImport("tui", tui_module);
     exe.root_module.addImport("game", game_module);
+
+    exe.linkLibrary(raylib_artifact);
+    exe.root_module.addImport("raylib", raylib_module);
+    exe.root_module.addImport("raygui", raygui_module);
 
     b.installArtifact(exe);
 

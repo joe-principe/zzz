@@ -20,6 +20,10 @@
             .url = "git+https://github.com/rockorager/libvaxis#fcdeb321feccc1b2b62391c1e257c385a799810e",
             .hash = "1220be1b2c1cf8809459629fde0d7ff2eb1bca854a99e4ac69fa19e03afec9428460",
         },
+        .@"raylib-zig" = .{
+            .url = "https://github.com/Not-Nik/raylib-zig/archive/devel.tar.gz",
+            .hash = "1220fc554f109a45a77ee5c58b4a847936dc0b24dcbed818b65a02de1b58500041dc",
+        },
     },
 
     .paths = .{
