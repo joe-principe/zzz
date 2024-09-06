@@ -24,6 +24,8 @@ pub fn main() !void {
 
     var game = zzz.Game.init();
 
+    try app.printStartScreen();
+
     var i: u8 = 0;
     while (i < 2) : (i += 1) {
         try app.choosePlayer(&game, i);
@@ -47,8 +49,10 @@ pub fn main() !void {
     while (game_status == zzz.WinState.None) {
         try app.printBoard(&game);
 
+        const player_num = @intFromEnum(game.current_player);
+
         var pos: u8 = undefined;
-        switch (game.players[@as(usize, @intFromEnum(game.current_player))]) {
+        switch (game.players[player_num]) {
             .Local => {
                 if (app.getLocalMove(&game)) |val| {
                     pos = val;

@@ -62,6 +62,34 @@ pub const TuiApp = struct {
         self.tty.deinit();
     }
 
+    /// Prints the start menu
+    pub fn printStartScreen(self: *Self) !void {
+        while (true) {
+            const win = self.vx.window();
+            win.clear();
+
+            const txt: vaxis.Segment = .{
+                .text = "Zig-Zag-Zoe",
+            };
+            _ = try win.printSegment(txt, .{});
+
+            const info: vaxis.Segment = .{
+                .text = "Press any key to continue",
+            };
+            _ = try win.printSegment(info, .{ .row_offset = 2 });
+
+            win.hideCursor();
+
+            try self.vx.render(self.tty.anyWriter());
+
+            const event = self.loop.nextEvent();
+            switch (event) {
+                .key_press => break,
+                .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
+            }
+        }
+    }
+
     /// Lets the user choose the type of a player
     pub fn choosePlayer(
         self: *Self,
@@ -94,7 +122,7 @@ pub const TuiApp = struct {
                     .text = opt,
                     .style = if (i == selected_option) .{ .reverse = true } else .{},
                 }};
-                _ = try win.print(&seg, .{ .row_offset = i + 1 });
+                _ = try win.print(&seg, .{ .row_offset = i + 2 });
             }
 
             try self.vx.render(self.tty.anyWriter());
@@ -137,15 +165,15 @@ pub const TuiApp = struct {
             win.clear();
 
             const txt: vaxis.Segment = .{
-                .text = "Pick a difficulty: ",
+                .text = try std.fmt.allocPrint(self.allocator, "Choose bot {d} difficulty: ", .{player + 1}),
             };
-
+            defer self.allocator.free(txt.text);
             _ = try win.printSegment(txt, .{});
 
             win.hideCursor();
             for (options, 0..) |opt, i| {
                 var seg = [_]vaxis.Segment{.{ .text = opt, .style = if (i == selected_option) .{ .reverse = true } else .{} }};
-                _ = try win.print(&seg, .{ .row_offset = i + 1 });
+                _ = try win.print(&seg, .{ .row_offset = i + 2 });
             }
 
             try self.vx.render(self.tty.anyWriter());
