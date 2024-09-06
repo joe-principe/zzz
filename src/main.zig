@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const ai = @import("ai");
+const gui = @import("gui");
 const tui = @import("tui");
 const zzz = @import("game");
 
@@ -18,20 +19,27 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    var app = try tui.TuiApp.init(allocator);
-    try app.init_loop();
-    defer app.deinit();
+    const gui_mode: bool = @import("build_options").gui;
+
+    var tui_app: tui.TuiApp = undefined;
+    var gui_app: gui.GuiApp = undefined;
+    if (gui_mode) {
+        gui_app = gui.GuiApp.init(allocator);
+    } else {
+        tui_app = try tui.TuiApp.init(allocator);
+        try tui_app.init_loop();
+    }
 
     var game = zzz.Game.init();
 
-    try app.printStartScreen();
+    if (gui_mode) gui.GuiApp.printStartScreen() else try tui_app.printStartScreen();
 
     var i: u8 = 0;
     while (i < 2) : (i += 1) {
-        try app.choosePlayer(&game, i);
+        if (gui_mode) gui.GuiApp.choosePlayer(&game, i) else try tui_app.choosePlayer(&game, i);
 
         if (game.players[i] == zzz.PlayerType.Computer) {
-            try app.chooseBotDifficulty(&game, i);
+            if (gui_mode) gui.GuiApp.chooseBotDifficulty(&game, i) else try tui_app.chooseBotDifficulty(&game, i);
 
             if (game.players[i].Computer == ai.BotDifficulty.Cache) {
                 ai.cache[i] = std.AutoHashMap(zzz.Board, zzz.WinState).init(allocator);
@@ -47,18 +55,27 @@ pub fn main() !void {
 
     var game_status = zzz.WinState.None;
     while (game_status == zzz.WinState.None) {
-        try app.printBoard(&game);
+        if (gui_mode) try gui.GuiApp.printBoard(&game) else try tui_app.printBoard(&game);
 
         const player_num = @intFromEnum(game.current_player);
 
         var pos: u8 = undefined;
         switch (game.players[player_num]) {
             .Local => {
-                if (app.getLocalMove(&game)) |val| {
-                    pos = val;
-                } else |err| {
-                    std.log.err("Error: {}\n", .{err});
-                    return;
+                if (gui_mode) {
+                    if (gui.GuiApp.getLocalMove(&game)) |val| {
+                        pos = val;
+                    } else |err| {
+                        std.log.err("Error: {}\n", .{err});
+                        return;
+                    }
+                } else {
+                    if (tui_app.getLocalMove(&game)) |val| {
+                        pos = val;
+                    } else |err| {
+                        std.log.err("Error: {}\n", .{err});
+                        return;
+                    }
                 }
             },
             .Computer => |difficulty| {
@@ -98,5 +115,11 @@ pub fn main() !void {
         game_status = game.board.getWinState(game.turn);
     }
 
-    try app.printEndScreen(&game, game_status);
+    if (gui_mode) {
+        try gui.GuiApp.printEndScreen(&game, game_status);
+        gui.GuiApp.deinit();
+    } else {
+        try tui_app.printEndScreen(&game, game_status);
+        tui_app.deinit();
+    }
 }
