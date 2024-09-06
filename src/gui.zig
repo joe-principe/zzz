@@ -90,6 +90,7 @@ pub const GuiApp = struct {
             if (continue_button_pressed and (selected_difficulty < 0 or selected_difficulty > 5)) {
                 should_display_select_text = true;
             } else {
+                game.players[player].Computer = @enumFromInt(selected_difficulty);
                 break;
             }
         }
@@ -109,7 +110,7 @@ pub const GuiApp = struct {
         } else {
             player = '2';
             mark = 'O';
-            player_color = rl.Color.red;
+            player_color = rl.Color.yellow;
         }
 
         const turn: [2]u8 = undefined;
@@ -117,13 +118,13 @@ pub const GuiApp = struct {
 
         // Column positions
         const left = 150;
-        const center = 305;
-        const right = 465;
+        const center = 300;
+        const right = 450;
 
         // Row positions
         const top = 140;
-        const middle = 300;
-        const bottom = 460;
+        const middle = 290;
+        const bottom = 440;
 
         const turn_text = "Turn " ++ turn;
 
@@ -145,21 +146,21 @@ pub const GuiApp = struct {
 
         // Column indicators
         rl.drawText("1", 160, 30, 64, rl.Color.white);
-        rl.drawText("2", 310, 30, 64, rl.Color.white);
-        rl.drawText("3", 465, 30, 64, rl.Color.white);
+        rl.drawText("2", 300, 30, 64, rl.Color.white);
+        rl.drawText("3", 450, 30, 64, rl.Color.white);
 
         // Row indicators
         rl.drawText("A", 30, 140, 64, rl.Color.white);
-        rl.drawText("B", 30, 300, 64, rl.Color.white);
-        rl.drawText("C", 30, 460, 64, rl.Color.white);
+        rl.drawText("B", 30, 290, 64, rl.Color.white);
+        rl.drawText("C", 30, 440, 64, rl.Color.white);
 
         // Vertical dividers
-        rl.drawRectangle(240, 100, 10, 450, rl.Color.black);
-        rl.drawRectangle(400, 100, 10, 450, rl.Color.black);
+        rl.drawRectangle(240, 100, 10, 440, rl.Color.black);
+        rl.drawRectangle(390, 100, 10, 440, rl.Color.black);
 
         // Horizontal dividers
-        rl.drawRectangle(100, 240, 450, 10, rl.Color.black);
-        rl.drawRectangle(100, 400, 450, 10, rl.Color.black);
+        rl.drawRectangle(100, 240, 440, 10, rl.Color.black);
+        rl.drawRectangle(100, 390, 440, 10, rl.Color.black);
 
         // Draw the marks
         for (0..3) |j| {
@@ -183,11 +184,93 @@ pub const GuiApp = struct {
 
     /// Gets a move from a local player
     pub fn getLocalMove(game: *zzz.Game) u8 {
+        // Column positions
+        const left = 100;
+        const center = 250;
+        const right = 400;
 
+        // Row positions
+        const top = 100;
+        const middle = 250;
+        const bottom = 400;
+
+        const size = 140;
+
+        const squares: [9]rl.Rectangle = .{
+            .{ .x = left,   .y = top,    .width = size, .height = size },
+            .{ .x = center, .y = top,    .width = size, .height = size },
+            .{ .x = right,  .y = top,    .width = size, .height = size },
+            .{ .x = left,   .y = middle, .width = size, .height = size },
+            .{ .x = center, .y = middle, .width = size, .height = size },
+            .{ .x = right,  .y = middle, .width = size, .height = size },
+            .{ .x = left,   .y = bottom, .width = size, .height = size },
+            .{ .x = center, .y = bottom, .width = size, .height = size },
+            .{ .x = right,  .y = bottom, .width = size, .height = size },
+        };
+
+        var pos: u8 = undefined;
+
+        while (true) blk: {
+            const mouse_pos = rl.getMousePosition();
+
+            rl.beginDrawing();
+            defer rl.endDrawing();
+
+            for (squares, 0..) |square, i| {
+                const color = if (game.board.isPositionOccupied(i)) rl.Color.red else rl.Color.green;
+
+                if (rl.checkCollisionPointRec(mouse_pos, square)) {
+                    rl.drawRectangleRec(square, color);
+
+                    if (!game.board.isPositionOccupied(i) and rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left)) {
+                        pos = i;
+                        game.board.placeMark(game.current_player, i);
+                        break :blk;
+                    }
+                }
+            }
+
+            GuiApp.printBoard(game);
+        }
+
+        return pos;
     }
 
     /// Prints the result screen
     pub fn printEndScreen(game: *zzz.Game, result: zzz.WinState) void {
+        var winner: u8 = undefined;
+        const winner_color: rl.Color = undefined;
+        if (result == zzz.WinState.X) {
+            winner = '1';
+            winner_color = rl.Color.blue;
+        } else if (result == zzz.WinState.O) {
+            winner = '2';
+            winner_color = rl.Color.yellow;
+        }
 
+        const p_text = "Player " ++ winner;
+        const p_width = rl.measureText(p_text, 48);
+        const win_offset = p_width + 30;
+
+        const tie_text = "The game is a tie!";
+        const end_text = "Press Esc to exit";
+
+        while (true) {
+            if (rl.getKeyPressed() == rl.KeyboardKey.key_escape) break;
+
+            rl.beginDrawing();
+            defer rl.endDrawing();
+
+            if (result == zzz.WinState.Tie) {
+                rl.drawText(tie_text, 30, 680, 48, rl.Color.black);
+            } else {
+                rl.drawText(p_text, 30, 680, 48, winner_color);
+                rl.drawText(" wins!", win_offset, 680, 48, rl.Color.black);
+            }
+
+            rl.drawText(end_text, 30, 740, 24, rl.Color.black);
+
+            GuiApp.printBoard(game);
+        }
     }
 };
