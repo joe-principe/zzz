@@ -12,6 +12,9 @@ Tic-tac-toe TUI/GUI game written in Zig
 ## From Releases
 Just run the file like you normally would from your command line.
 
+NOTE: There is a one second delay between moves when both players are bots. This
+is so their moves are visible. Otherwise, the game finishes instantly
+
 ## From Source
 You should be able to simply type `zig build run`. If there are any errors about
 missing "vaxis", then run `zig fetch --save git+https://github.com/rockorager/libvaxis`,
