@@ -166,13 +166,13 @@ pub const Board = struct {
     /// Gets all of the legal moves
     /// Modifies the input array to contain the legal moves
     /// Returns the number of legal moves
-    pub fn getLegalMoves(self: *const Self, slice: *[9]u8) usize {
+    pub fn getLegalMoves(self: *const Self, legal: *[9]u8) usize {
         var i: u8 = 0;
         var j: u8 = 0;
 
         while (i < 9) : (i += 1) {
             if (!self.isPositionOccupied(i)) {
-                slice[j] = i;
+                legal[j] = i;
                 j += 1;
             }
         }

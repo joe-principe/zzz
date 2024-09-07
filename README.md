@@ -9,11 +9,11 @@ Tic-tac-toe TUI/GUI game written in Zig
     * Bots can play against other bots, too!
 
 # How To Run
-## From Releases
-Just run the file like you normally would from your command line.
-
 NOTE: There is a one second delay between moves when both players are bots. This
 is so their moves are visible. Otherwise, the game finishes instantly
+
+## From Releases
+Just run the file like you normally would from your command line.
 
 ## From Source
 You should be able to simply type `zig build run`. If there are any errors about

@@ -23,12 +23,15 @@ pub fn main() !void {
 
     var tui_app: tui.TuiApp = undefined;
     var gui_app: gui.GuiApp = undefined;
+
     if (gui_mode) {
         gui_app = gui.GuiApp.init(allocator);
     } else {
         tui_app = try tui.TuiApp.init(allocator);
         try tui_app.init_loop();
     }
+
+    defer if (gui_mode) gui.GuiApp.deinit() else tui_app.deinit();
 
     var game = zzz.Game.init();
 
@@ -117,9 +120,7 @@ pub fn main() !void {
 
     if (gui_mode) {
         try gui.GuiApp.printEndScreen(&game, game_status);
-        gui.GuiApp.deinit();
     } else {
         try tui_app.printEndScreen(&game, game_status);
-        tui_app.deinit();
     }
 }
