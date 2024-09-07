@@ -15,6 +15,9 @@ pub const GuiApp = struct {
     /// The memory allocator
     allocator: std.mem.Allocator,
 
+    /// A flag for if the app should close
+    should_quit: bool,
+
     /// Creates the GUI window
     pub fn init(allocator: std.mem.Allocator) GuiApp {
         rl.initWindow(screen_width, screen_height, "Zig-Zag-Zoe");
@@ -26,7 +29,7 @@ pub const GuiApp = struct {
         font.baseSize = 5;
         rg.guiSetFont(font);
 
-        return .{ .allocator = allocator };
+        return .{ .allocator = allocator, .should_quit = false };
     }
 
     /// Closes the GUI window
@@ -35,7 +38,7 @@ pub const GuiApp = struct {
     }
 
     /// Prints the start menu
-    pub fn printStartScreen() void {
+    pub fn printStartScreen(self: *Self) void {
         var font = rl.getFontDefault();
         font.baseSize = 2;
         rg.guiSetFont(font);
@@ -58,6 +61,12 @@ pub const GuiApp = struct {
         var start_button_state: i32 = undefined;
 
         while (true) {
+            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
+            if (pressed) {
+                self.should_quit = true;
+                break;
+            }
+
             rl.beginDrawing();
             defer rl.endDrawing();
 
@@ -76,6 +85,7 @@ pub const GuiApp = struct {
 
     /// Lets the user choose the type of a player
     pub fn choosePlayer(
+        self: *Self,
         game: *zzz.Game,
         player: u8,
     ) void {
@@ -102,6 +112,12 @@ pub const GuiApp = struct {
         const tc_offset = @divFloor((screen_width - tc_width), 2);
 
         while (true) {
+            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
+            if (pressed) {
+                self.should_quit = true;
+                break;
+            }
+
             rl.beginDrawing();
             defer rl.endDrawing();
 
@@ -131,6 +147,7 @@ pub const GuiApp = struct {
 
     /// Lets the user choose the difficulty of a bot player
     pub fn chooseBotDifficulty(
+        self: *Self,
         game: *zzz.Game,
         player: u8,
     ) void {
@@ -159,6 +176,12 @@ pub const GuiApp = struct {
         const tc_offset = @divFloor((screen_width - tc_width), 2);
 
         while (true) {
+            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
+            if (pressed) {
+                self.should_quit = true;
+                break;
+            }
+
             rl.beginDrawing();
             defer rl.endDrawing();
 
@@ -187,7 +210,7 @@ pub const GuiApp = struct {
     }
 
     /// Prints out the board
-    pub fn printBoard(game: *zzz.Game) !void {
+    pub fn printBoard(self: *Self, game: *zzz.Game) !void {
         const b = game.board.toString();
 
         var mark: [*:0]const u8 = undefined;
@@ -246,6 +269,9 @@ pub const GuiApp = struct {
 
         const rp_text = ")'s turn";
         const rp_offset = rl.measureText(mark, 32) + mark_offset;
+
+        const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
+        if (pressed) self.should_quit = true;
 
         rl.beginDrawing();
         defer rl.endDrawing();
@@ -307,7 +333,7 @@ pub const GuiApp = struct {
     }
 
     /// Gets a move from a local player
-    pub fn getLocalMove(game: *zzz.Game) !u8 {
+    pub fn getLocalMove(self: *Self, game: *zzz.Game) !u8 {
         // Column positions
         const left = 100;
         const center = 250;
@@ -336,6 +362,12 @@ pub const GuiApp = struct {
 
         var should_loop = true;
         while (should_loop) {
+            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
+            if (pressed) {
+                self.should_quit = true;
+                break;
+            }
+
             const mouse_pos = rl.getMousePosition();
             const clicked = rl.isMouseButtonDown(rl.MouseButton.mouse_button_left) or rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left) or rl.isMouseButtonReleased(rl.MouseButton.mouse_button_left);
 
@@ -360,14 +392,14 @@ pub const GuiApp = struct {
                 i += 1;
             }
 
-            try GuiApp.printBoard(game);
+            try self.printBoard(game);
         }
 
         return pos;
     }
 
     /// Prints the result screen
-    pub fn printEndScreen(game: *zzz.Game, result: zzz.WinState) !void {
+    pub fn printEndScreen(self: *Self, game: *zzz.Game, result: zzz.WinState) !void {
         var winner: u8 = undefined;
         var winner_color: rl.Color = undefined;
         if (result == zzz.WinState.X) {
@@ -387,7 +419,10 @@ pub const GuiApp = struct {
 
         while (true) {
             const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) break;
+            if (pressed) {
+                self.should_quit = true;
+                break;
+            }
 
             rl.beginDrawing();
             defer rl.endDrawing();
@@ -403,7 +438,7 @@ pub const GuiApp = struct {
 
             rl.drawText(end_text, 30, 740, 24, rl.Color.black);
 
-            try GuiApp.printBoard(game);
+            try self.printBoard(game);
         }
     }
 };

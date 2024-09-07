@@ -32,9 +32,6 @@ numlock is off).
 
 Press enter, space, or keypad enter to select.
 
-NOTE: The game can't be quit early. You have to finish the game in order to
-close the application. The game doesn't respond to Ctrl-C from the terminal :(
-
 ## GUI
 Click on buttons and squares with your mouse. Note that the game is 600x800
 resolution, so make sure your monitor is >= 800 pixels high

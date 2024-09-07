@@ -26,6 +26,9 @@ pub const TuiApp = struct {
     /// The memory allocator
     allocator: std.mem.Allocator,
 
+    /// A flag for if the app should close
+    should_quit: bool,
+
     /// The teletype terminal
     tty: vaxis.Tty,
 
@@ -39,6 +42,7 @@ pub const TuiApp = struct {
     pub fn init(allocator: std.mem.Allocator) !TuiApp {
         return .{
             .allocator = allocator,
+            .should_quit = false,
             .tty = try vaxis.Tty.init(),
             .vx = try vaxis.init(allocator, .{}),
             .loop = undefined,
@@ -84,7 +88,14 @@ pub const TuiApp = struct {
 
             const event = self.loop.nextEvent();
             switch (event) {
-                .key_press => break,
+                .key_press => |key| {
+                    if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
+                        self.should_quit = true;
+                        break;
+                    } else {
+                        break;
+                    }
+                },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
         }
@@ -136,6 +147,9 @@ pub const TuiApp = struct {
                         selected_option = @min(options.len - 1, selected_option + 1);
                     } else if (key.matchesAny(&select_keys, .{})) {
                         game.players[player] = if (selected_option == 0) .Local else zzz.Player{ .Computer = undefined };
+                        break;
+                    } else if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
+                        self.should_quit = true;
                         break;
                     }
                 },
@@ -191,6 +205,9 @@ pub const TuiApp = struct {
                         // Have to clear here, otherwise some options will still
                         // be shown when printing the board
                         win.clear();
+                        break;
+                    } else if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
+                        self.should_quit = true;
                         break;
                     }
                 },
@@ -265,6 +282,18 @@ pub const TuiApp = struct {
         _ = try win.printSegment(row, .{ .row_offset = 14 });
 
         try self.vx.render(self.tty.anyWriter());
+
+        // Get an event if there is one
+        // tryEvent() instead of nextEvent() because any blocking calls cause
+        // getLocalMove() to "lag" whenever a button is pressed due to a
+        // blocking call here
+        const event = self.loop.tryEvent() orelse return;
+        switch (event) {
+            .key_press => |key| {
+                if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) self.should_quit = true;
+            },
+            .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
+        }
     }
 
     /// Gets a move from a local player
@@ -291,35 +320,22 @@ pub const TuiApp = struct {
             switch (event) {
                 .key_press => |key| {
                     if (key.matchesAny(&up_keys, .{})) {
-                        if (cursor_pos.y == 0) {
-                            cursor_pos.y = 2;
-                        } else {
-                            cursor_pos.y -|= 1;
-                        }
+                        cursor_pos.y = if (cursor_pos.y == 0) 2 else cursor_pos.y -| 1;
                     } else if (key.matchesAny(&down_keys, .{})) {
-                        if (cursor_pos.y == 2) {
-                            cursor_pos.y = 0;
-                        } else {
-                            cursor_pos.y += 1;
-                        }
+                        cursor_pos.y = if (cursor_pos.y == 2) 0 else cursor_pos.y + 1;
                     } else if (key.matchesAny(&left_keys, .{})) {
-                        if (cursor_pos.x == 0) {
-                            cursor_pos.x = 2;
-                        } else {
-                            cursor_pos.x -|= 1;
-                        }
+                        cursor_pos.x = if (cursor_pos.x == 0) 2 else cursor_pos.x -| 1;
                     } else if (key.matchesAny(&right_keys, .{})) {
-                        if (cursor_pos.x == 2) {
-                            cursor_pos.x = 0;
-                        } else {
-                            cursor_pos.x += 1;
-                        }
+                        cursor_pos.x = if (cursor_pos.x == 2) 0 else cursor_pos.x + 1;
                     } else if (key.matchesAny(&select_keys, .{})) {
                         pos = cursor_pos.x + 3 * cursor_pos.y;
                         if (!game.board.isPositionOccupied(pos)) {
                             game.board.placeMark(game.current_player, pos);
                             break;
                         }
+                    } else if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
+                        self.should_quit = true;
+                        break;
                     }
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
@@ -385,7 +401,7 @@ pub const TuiApp = struct {
             const event = self.loop.nextEvent();
             switch (event) {
                 .key_press => |key| {
-                    if (key.matches(vaxis.Key.escape, .{})) break;
+                    if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) break;
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }

@@ -30,19 +30,33 @@ pub fn main() !void {
         tui_app = try tui.TuiApp.init(allocator);
         try tui_app.init_loop();
     }
-
     defer if (gui_mode) gui.GuiApp.deinit() else tui_app.deinit();
 
     var game = zzz.Game.init();
 
-    if (gui_mode) gui.GuiApp.printStartScreen() else try tui_app.printStartScreen();
+    if (gui_mode) gui_app.printStartScreen() else try tui_app.printStartScreen();
+    if (gui_mode) {
+        if (gui_app.should_quit) return;
+    } else {
+        if (tui_app.should_quit) return;
+    }
 
     var i: u8 = 0;
     while (i < 2) : (i += 1) {
-        if (gui_mode) gui.GuiApp.choosePlayer(&game, i) else try tui_app.choosePlayer(&game, i);
+        if (gui_mode) gui_app.choosePlayer(&game, i) else try tui_app.choosePlayer(&game, i);
+        if (gui_mode) {
+            if (gui_app.should_quit) return;
+        } else {
+            if (tui_app.should_quit) return;
+        }
 
         if (game.players[i] == zzz.PlayerType.Computer) {
-            if (gui_mode) gui.GuiApp.chooseBotDifficulty(&game, i) else try tui_app.chooseBotDifficulty(&game, i);
+            if (gui_mode) gui_app.chooseBotDifficulty(&game, i) else try tui_app.chooseBotDifficulty(&game, i);
+            if (gui_mode) {
+                if (gui_app.should_quit) return;
+            } else {
+                if (tui_app.should_quit) return;
+            }
 
             if (game.players[i].Computer == ai.BotDifficulty.Cache) {
                 ai.cache[i] = std.AutoHashMap(zzz.Board, zzz.WinState).init(allocator);
@@ -58,7 +72,12 @@ pub fn main() !void {
 
     var game_status = zzz.WinState.None;
     while (game_status == zzz.WinState.None) {
-        if (gui_mode) try gui.GuiApp.printBoard(&game) else try tui_app.printBoard(&game);
+        if (gui_mode) try gui_app.printBoard(&game) else try tui_app.printBoard(&game);
+        if (gui_mode) {
+            if (gui_app.should_quit) return;
+        } else {
+            if (tui_app.should_quit) return;
+        }
 
         const player_num = @intFromEnum(game.current_player);
 
@@ -66,7 +85,8 @@ pub fn main() !void {
         switch (game.players[player_num]) {
             .Local => {
                 if (gui_mode) {
-                    if (gui.GuiApp.getLocalMove(&game)) |val| {
+                    if (gui_app.getLocalMove(&game)) |val| {
+                        if (gui_app.should_quit) return;
                         pos = val;
                     } else |err| {
                         std.log.err("Error: {}\n", .{err});
@@ -74,6 +94,7 @@ pub fn main() !void {
                     }
                 } else {
                     if (tui_app.getLocalMove(&game)) |val| {
+                        if (tui_app.should_quit) return;
                         pos = val;
                     } else |err| {
                         std.log.err("Error: {}\n", .{err});
@@ -119,7 +140,7 @@ pub fn main() !void {
     }
 
     if (gui_mode) {
-        try gui.GuiApp.printEndScreen(&game, game_status);
+        try gui_app.printEndScreen(&game, game_status);
     } else {
         try tui_app.printEndScreen(&game, game_status);
     }
