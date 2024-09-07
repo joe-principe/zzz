@@ -61,8 +61,7 @@ pub const GuiApp = struct {
         var start_button_state: i32 = undefined;
 
         while (true) {
-            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) {
+            if (rl.windowShouldClose()) {
                 self.should_quit = true;
                 break;
             }
@@ -112,8 +111,7 @@ pub const GuiApp = struct {
         const tc_offset = @divFloor((screen_width - tc_width), 2);
 
         while (true) {
-            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) {
+            if (rl.windowShouldClose()) {
                 self.should_quit = true;
                 break;
             }
@@ -176,8 +174,7 @@ pub const GuiApp = struct {
         const tc_offset = @divFloor((screen_width - tc_width), 2);
 
         while (true) {
-            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) {
+            if (rl.windowShouldClose()) {
                 self.should_quit = true;
                 break;
             }
@@ -211,6 +208,8 @@ pub const GuiApp = struct {
 
     /// Prints out the board
     pub fn printBoard(self: *Self, game: *zzz.Game) !void {
+        if (rl.windowShouldClose()) self.should_quit = true;
+
         const b = game.board.toString();
 
         var mark: [*:0]const u8 = undefined;
@@ -223,41 +222,10 @@ pub const GuiApp = struct {
             player_color = rl.Color.yellow;
         }
 
-        // Column positions
-        const left = 150;
-        const center = 300;
-        const right = 450;
+        const turn_fmt_text: [:0]const u8 = try std.fmt.allocPrintZ(self.allocator, "Turn {d}", .{game.turn});
+        defer self.allocator.free(turn_fmt_text);
 
-        // Row positions
-        const top = 140;
-        const middle = 290;
-        const bottom = 440;
-
-        // If it's dumb and it works...
-        // Doing this because I don't know how to convert from slices to c
-        // strings. TODO: Fix this when you figure it out
-        var turn_text: [*:0]const u8 = undefined;
-        if (game.turn == 1) {
-            turn_text = "Turn 1";
-        } else if (game.turn == 2) {
-            turn_text = "Turn 2";
-        } else if (game.turn == 3) {
-            turn_text = "Turn 3";
-        } else if (game.turn == 4) {
-            turn_text = "Turn 4";
-        } else if (game.turn == 5) {
-            turn_text = "Turn 5";
-        } else if (game.turn == 6) {
-            turn_text = "Turn 6";
-        } else if (game.turn == 7) {
-            turn_text = "Turn 7";
-        } else if (game.turn == 8) {
-            turn_text = "Turn 8";
-        } else if (game.turn == 9) {
-            turn_text = "Turn 9";
-        } else if (game.turn == 10) {
-            turn_text = "Turn 10";
-        }
+        const turn_text: [*:0]const u8 = turn_fmt_text;
 
         const p_text = if (game.current_player == zzz.Mark.X) "Player 1 " else "Player 2 ";
         const p_width = rl.measureText(p_text, 32);
@@ -270,23 +238,30 @@ pub const GuiApp = struct {
         const rp_text = ")'s turn";
         const rp_offset = rl.measureText(mark, 32) + mark_offset;
 
-        const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-        if (pressed) self.should_quit = true;
-
         rl.beginDrawing();
         defer rl.endDrawing();
 
         rl.clearBackground(background_color);
 
+        // Column positions
+        const left = 150;
+        const center = 300;
+        const right = 450;
+
+        // Row positions
+        const top = 140;
+        const middle = 290;
+        const bottom = 440;
+
         // Column indicators
-        rl.drawText("1", 160, 30, 64, rl.Color.white);
-        rl.drawText("2", 300, 30, 64, rl.Color.white);
-        rl.drawText("3", 450, 30, 64, rl.Color.white);
+        rl.drawText("1", left + 10, 30, 64, rl.Color.white);
+        rl.drawText("2", center, 30, 64, rl.Color.white);
+        rl.drawText("3", right, 30, 64, rl.Color.white);
 
         // Row indicators
-        rl.drawText("A", 30, 140, 64, rl.Color.white);
-        rl.drawText("B", 30, 290, 64, rl.Color.white);
-        rl.drawText("C", 30, 440, 64, rl.Color.white);
+        rl.drawText("A", 30, top, 64, rl.Color.white);
+        rl.drawText("B", 30, middle, 64, rl.Color.white);
+        rl.drawText("C", 30, bottom, 64, rl.Color.white);
 
         // Vertical dividers
         rl.drawRectangle(240, 100, 10, 440, rl.Color.black);
@@ -304,6 +279,7 @@ pub const GuiApp = struct {
                 const x: i32 = if (i == 0) left else if (i == 1) center else right;
                 const y: i32 = if (j == 0) top else if (j == 1) middle else bottom;
 
+                // Raylib only accepts c-strings, not chars, hence this junk below
                 var m: [*:0]const u8 = undefined;
                 var mark_color: rl.Color = undefined;
                 if (b[index] == 'X') {
@@ -362,8 +338,7 @@ pub const GuiApp = struct {
 
         var should_loop = true;
         while (should_loop) {
-            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) {
+            if (rl.windowShouldClose()) {
                 self.should_quit = true;
                 break;
             }
@@ -382,7 +357,6 @@ pub const GuiApp = struct {
                     rl.drawRectangleRec(square, color);
 
                     if (!game.board.isPositionOccupied(i) and clicked) {
-                        game.board.placeMark(game.current_player, i);
                         pos = i;
                         should_loop = false;
                         break;
@@ -399,7 +373,11 @@ pub const GuiApp = struct {
     }
 
     /// Prints the result screen
-    pub fn printEndScreen(self: *Self, game: *zzz.Game, result: zzz.WinState) !void {
+    pub fn printEndScreen(
+        self: *Self,
+        game: *zzz.Game,
+        result: zzz.WinState,
+    ) !void {
         var winner: u8 = undefined;
         var winner_color: rl.Color = undefined;
         if (result == zzz.WinState.X) {
@@ -418,11 +396,9 @@ pub const GuiApp = struct {
         const end_text = "Press Esc to exit";
 
         while (true) {
-            const pressed = rl.isKeyDown(rl.KeyboardKey.key_escape) or rl.isKeyPressed(rl.KeyboardKey.key_escape) or rl.isKeyReleased(rl.KeyboardKey.key_escape);
-            if (pressed) {
-                self.should_quit = true;
-                break;
-            }
+            // Program quits faster if the check is within the loop rather than
+            // at the start
+            if (rl.windowShouldClose()) break;
 
             rl.beginDrawing();
             defer rl.endDrawing();

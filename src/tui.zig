@@ -329,10 +329,7 @@ pub const TuiApp = struct {
                         cursor_pos.x = if (cursor_pos.x == 2) 0 else cursor_pos.x + 1;
                     } else if (key.matchesAny(&select_keys, .{})) {
                         pos = cursor_pos.x + 3 * cursor_pos.y;
-                        if (!game.board.isPositionOccupied(pos)) {
-                            game.board.placeMark(game.current_player, pos);
-                            break;
-                        }
+                        if (!game.board.isPositionOccupied(pos)) break;
                     } else if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
                         self.should_quit = true;
                         break;

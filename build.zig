@@ -10,8 +10,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const game_module = b.createModule(.{
+        .root_source_file = b.path("src/game.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const gui_module = b.createModule(.{
         .root_source_file = b.path("src/gui.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Add libvaxis module dependency
+    const libvaxis = b.dependency("vaxis", .{
         .target = target,
         .optimize = optimize,
     });
@@ -22,14 +34,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const game_module = b.createModule(.{
-        .root_source_file = b.path("src/game.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // Add libvaxis module dependency
-    const libvaxis = b.dependency("vaxis", .{
+    const ui_module = b.createModule(.{
+        .root_source_file = b.path("src/ui.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -43,6 +49,8 @@ pub fn build(b: *std.Build) void {
 
     ai_module.addImport("game", game_module);
 
+    game_module.addImport("ai", ai_module);
+
     gui_module.addImport("game", game_module);
     gui_module.addImport("raylib", raylib_module);
     gui_module.addImport("raygui", raygui_module);
@@ -50,7 +58,9 @@ pub fn build(b: *std.Build) void {
     tui_module.addImport("vaxis", libvaxis.module("vaxis"));
     tui_module.addImport("game", game_module);
 
-    game_module.addImport("ai", ai_module);
+    ui_module.addImport("gui", gui_module);
+    ui_module.addImport("tui", tui_module);
+    ui_module.addImport("game", game_module);
 
     const exe = b.addExecutable(.{
         .name = "zzz",
@@ -63,9 +73,10 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "gui", b.option(bool, "gui", "Uses gui mode") orelse false);
 
     exe.root_module.addImport("ai", ai_module);
+    exe.root_module.addImport("game", game_module);
     exe.root_module.addImport("gui", gui_module);
     exe.root_module.addImport("tui", tui_module);
-    exe.root_module.addImport("game", game_module);
+    exe.root_module.addImport("ui", ui_module);
 
     exe.linkLibrary(raylib_artifact);
     exe.root_module.addImport("raylib", raylib_module);
