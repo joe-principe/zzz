@@ -10,6 +10,28 @@ const left_keys: [4]u21 = .{ 'a', 'h', vaxis.Key.left, vaxis.Key.kp_left };
 const right_keys: [4]u21 = .{ 'd', 'l', vaxis.Key.right, vaxis.Key.kp_right };
 const select_keys: [3]u21 = .{ vaxis.Key.enter, vaxis.Key.kp_enter, vaxis.Key.space };
 
+const x_color: vaxis.Style = .{ .fg = vaxis.Cell.Color.rgbFromUint(0x008DF1) };
+const o_color: vaxis.Style = .{ .fg = vaxis.Cell.Color.rgbFromUint(0xFDF900) };
+const white: vaxis.Style = .{ .fg = vaxis.Cell.Color.rgbFromUint(0xFFFFFF) };
+
+const title_wide =
+    \\ ______     __     ______     ______     ______     ______     ______     ______     ______    
+    \\/\___  \   /\ \   /\  ___\   /\___  \   /\  __ \   /\  ___\   /\___  \   /\  __ \   /\  ___\   
+    \\\/_/  /__  \ \ \  \ \ \__ \  \/_/  /__  \ \  __ \  \ \ \__ \  \/_/  /__  \ \ \/\ \  \ \  __\   
+    \\  /\_____\  \ \_\  \ \_____\   /\_____\  \ \_\ \_\  \ \_____\   /\_____\  \ \_____\  \ \_____\ 
+    \\  \/_____/   \/_/   \/_____/   \/_____/   \/_/\/_/   \/_____/   \/_____/   \/_____/   \/_____/ 
+;
+const tw_len = 95;
+
+const title_thin =
+    \\  _____         ____             ____         
+    \\ |_  (_)__ _ __|_  /__ _ __ _ __|_  /___  ___ 
+    \\  / /| / _` |___/ // _` / _` |___/ // _ \/ -_)
+    \\ /___|_\__, |  /___\__,_\__, |  /___\___/\___|
+    \\       |___/            |___/                 
+;
+const tt_len = 46;
+
 /// The possible events vaxis can receive
 const Event = union(enum) {
     /// An input from the keyboard
@@ -58,6 +80,9 @@ pub const TuiApp = struct {
 
         try self.loop.init();
         try self.loop.start();
+
+        try self.vx.enterAltScreen(self.tty.anyWriter());
+        try self.vx.queryTerminal(self.tty.anyWriter(), 1 * std.time.ns_per_s);
     }
 
     /// Stops the TUI event loop and deinitializes the TUI
@@ -69,25 +94,36 @@ pub const TuiApp = struct {
 
     /// Prints the start menu
     pub fn printStartScreen(self: *Self) !void {
+        // var color: vaxis.Cell.Color = .{ .rgb = [3]u8{ 0, 128, 255 } };
+
         while (true) {
             const win = self.vx.window();
             win.clear();
 
+            const title_offset: usize = if (win.width >= tw_len) tw_len else tt_len;
+            const title_win = win.child(.{
+                .x_off = @divFloor(win.width -| title_offset, 2),
+                .y_off = @divFloor(win.height -| 5, 2),
+            });
+
             const txt: vaxis.Segment = .{
-                .text = "Zig-Zag-Zoe",
+                .text = if (win.width >= 95) title_wide else title_thin,
+                // .style = .{ .fg = color },
             };
-            _ = try win.printSegment(txt, .{});
+            _ = try title_win.printSegment(txt, .{});
 
             const info: vaxis.Segment = .{
                 .text = "Press any key to continue",
             };
-            _ = try win.printSegment(info, .{ .row_offset = 2 });
+            const info_off_x: usize = @divFloor(win.width -| info.text.len, 2);
+            const info_off_y: usize = @divFloor(win.height -| 5, 2) + 9;
+            _ = try win.printSegment(info, .{ .row_offset = info_off_y, .col_offset = info_off_x });
 
             win.hideCursor();
 
             try self.vx.render(self.tty.anyWriter());
 
-            const event = self.loop.nextEvent();
+            const event = self.loop.tryEvent() orelse continue;
             switch (event) {
                 .key_press => |key| {
                     if (key.matches(vaxis.Key.escape, .{}) or key.matches('c', .{ .ctrl = true })) {
@@ -121,20 +157,25 @@ pub const TuiApp = struct {
             const win = self.vx.window();
             win.clear();
 
+            const child_win = win.child(.{
+                .x_off = @divFloor(win.width -| 21, 2),
+                .y_off = @divFloor(win.height -| 4, 2),
+            });
+
             const txt: vaxis.Segment = .{
                 .text = try std.fmt.allocPrint(self.allocator, "Choose player {d} ({c}): ", .{ player + 1, mark }),
             };
             defer self.allocator.free(txt.text);
 
-            _ = try win.printSegment(txt, .{});
+            _ = try child_win.printSegment(txt, .{});
 
-            win.hideCursor();
+            child_win.hideCursor();
             for (options, 0..) |opt, i| {
                 var seg = [_]vaxis.Segment{.{
                     .text = opt,
                     .style = if (i == selected_option) .{ .reverse = true } else .{},
                 }};
-                _ = try win.print(&seg, .{ .row_offset = i + 2 });
+                _ = try child_win.print(&seg, .{ .row_offset = i + 2 });
             }
 
             try self.vx.render(self.tty.anyWriter());
@@ -179,16 +220,21 @@ pub const TuiApp = struct {
             const win = self.vx.window();
             win.clear();
 
+            const child_win = win.child(.{
+                .x_off = @divFloor(win.width -| 25, 2),
+                .y_off = @divFloor(win.height -| 8, 2),
+            });
+
             const txt: vaxis.Segment = .{
                 .text = try std.fmt.allocPrint(self.allocator, "Choose bot {d} difficulty: ", .{player + 1}),
             };
             defer self.allocator.free(txt.text);
-            _ = try win.printSegment(txt, .{});
+            _ = try child_win.printSegment(txt, .{});
 
-            win.hideCursor();
+            child_win.hideCursor();
             for (options, 0..) |opt, i| {
                 var seg = [_]vaxis.Segment{.{ .text = opt, .style = if (i == selected_option) .{ .reverse = true } else .{} }};
-                _ = try win.print(&seg, .{ .row_offset = i + 2 });
+                _ = try child_win.print(&seg, .{ .row_offset = i + 2 });
             }
 
             try self.vx.render(self.tty.anyWriter());
@@ -222,21 +268,42 @@ pub const TuiApp = struct {
         const b = game.board.toString();
 
         const win = self.vx.window();
+        const child_win = win.child(.{
+            .x_off = @divFloor(win.width -| 29, 2),
+            .y_off = @divFloor(win.height -| 15, 2),
+        });
 
-        var player: u8 = undefined;
-        var mark: u8 = undefined;
-        if (game.current_player == zzz.Mark.X) {
-            player = 1;
-            mark = 'X';
-        } else {
-            player = 2;
-            mark = 'O';
-        }
+        const player: u8 = if (game.current_player == zzz.Mark.X) 1 else 2;
+        const mark = if (game.current_player == zzz.Mark.X) "X" else "O";
+        const color = if (game.current_player == zzz.Mark.X) x_color else o_color;
 
         const trn: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "Turn {d}. Player {d}'s ({c}) turn.", .{ game.turn, player, mark }),
+            .text = try std.fmt.allocPrint(self.allocator, "Turn {d}. ", .{game.turn}),
         };
         defer self.allocator.free(trn.text);
+
+        const plr_offset = trn.text.len;
+        const plr: vaxis.Segment = .{
+            .text = try std.fmt.allocPrint(self.allocator, "Player {d} ", .{player}),
+            .style = color,
+        };
+        defer self.allocator.free(plr.text);
+
+        const lpr_offset = plr.text.len + plr_offset;
+        const lpr: vaxis.Segment = .{
+            .text = "(",
+        };
+
+        const chr_offset = lpr.text.len + lpr_offset;
+        const chr: vaxis.Segment = .{
+            .text = mark,
+            .style = color,
+        };
+
+        const rpr_offset = chr.text.len + chr_offset;
+        const rpr: vaxis.Segment = .{
+            .text = ")'s turn.",
+        };
 
         const hdr: vaxis.Segment = .{
             .text = "     1     2     3  ",
@@ -249,38 +316,71 @@ pub const TuiApp = struct {
         const div: vaxis.Segment = .{ .text = "   \u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{256C}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}" };
 
         const top: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "A    {c}  {u}  {c}  {u}  {c}  ", .{ b[0], '\u{2551}', b[1], '\u{2551}', b[2] }),
+            .text = try std.fmt.allocPrint(self.allocator, "A       {u}     {u}     ", .{ '\u{2551}', '\u{2551}' }),
         };
         defer self.allocator.free(top.text);
 
         const mid: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "B    {c}  {u}  {c}  {u}  {c}  ", .{ b[3], '\u{2551}', b[4], '\u{2551}', b[5] }),
+            .text = try std.fmt.allocPrint(self.allocator, "B       {u}     {u}     ", .{ '\u{2551}', '\u{2551}' }),
         };
         defer self.allocator.free(mid.text);
 
         const bot: vaxis.Segment = .{
-            .text = try std.fmt.allocPrint(self.allocator, "C    {c}  {u}  {c}  {u}  {c}  ", .{ b[6], '\u{2551}', b[7], '\u{2551}', b[8] }),
+            .text = try std.fmt.allocPrint(self.allocator, "C       {u}     {u}     ", .{ '\u{2551}', '\u{2551}' }),
         };
         defer self.allocator.free(bot.text);
 
-        _ = try win.printSegment(trn, .{});
-        _ = try win.printSegment(hdr, .{ .row_offset = 2 });
+        _ = try child_win.printSegment(trn, .{});
+        _ = try child_win.printSegment(plr, .{ .col_offset = plr_offset });
+        _ = try child_win.printSegment(lpr, .{ .col_offset = lpr_offset });
+        _ = try child_win.printSegment(chr, .{ .col_offset = chr_offset });
+        _ = try child_win.printSegment(rpr, .{ .col_offset = rpr_offset });
 
-        _ = try win.printSegment(row, .{ .row_offset = 4 });
-        _ = try win.printSegment(top, .{ .row_offset = 5 });
-        _ = try win.printSegment(row, .{ .row_offset = 6 });
+        _ = try child_win.printSegment(hdr, .{ .row_offset = 2, .col_offset = 4 });
 
-        _ = try win.printSegment(div, .{ .row_offset = 7 });
+        _ = try child_win.printSegment(row, .{ .row_offset = 4, .col_offset = 4 });
+        _ = try child_win.printSegment(top, .{ .row_offset = 5, .col_offset = 4 });
+        _ = try child_win.printSegment(row, .{ .row_offset = 6, .col_offset = 4 });
 
-        _ = try win.printSegment(row, .{ .row_offset = 8 });
-        _ = try win.printSegment(mid, .{ .row_offset = 9 });
-        _ = try win.printSegment(row, .{ .row_offset = 10 });
+        _ = try child_win.printSegment(div, .{ .row_offset = 7, .col_offset = 4 });
 
-        _ = try win.printSegment(div, .{ .row_offset = 11 });
+        _ = try child_win.printSegment(row, .{ .row_offset = 8, .col_offset = 4 });
+        _ = try child_win.printSegment(mid, .{ .row_offset = 9, .col_offset = 4 });
+        _ = try child_win.printSegment(row, .{ .row_offset = 10, .col_offset = 4 });
 
-        _ = try win.printSegment(row, .{ .row_offset = 12 });
-        _ = try win.printSegment(bot, .{ .row_offset = 13 });
-        _ = try win.printSegment(row, .{ .row_offset = 14 });
+        _ = try child_win.printSegment(div, .{ .row_offset = 11, .col_offset = 4 });
+
+        _ = try child_win.printSegment(row, .{ .row_offset = 12, .col_offset = 4 });
+        _ = try child_win.printSegment(bot, .{ .row_offset = 13, .col_offset = 4 });
+        _ = try child_win.printSegment(row, .{ .row_offset = 14, .col_offset = 4 });
+
+        // Column positions
+        const col_left = 9;
+        const col_center = 15;
+        const col_right = 21;
+
+        // Row positions
+        const row_top = 5;
+        const row_middle = 9;
+        const row_bottom = 13;
+
+        // Draw the marks
+        for (0..3) |j| {
+            for (0..3) |i| {
+                const index = i + 3 * j;
+
+                const x: u16 = if (i == 0) col_left else if (i == 1) col_center else col_right;
+                const y: u16 = if (j == 0) row_top else if (j == 1) row_middle else row_bottom;
+
+                // Raylib only accepts c-strings, not chars, hence this junk below
+                const seg: vaxis.Segment = .{
+                    .text = if (b[index] == 'X') "X" else if (b[index] == 'O') "O" else " ",
+                    .style = if (b[index] == 'X') x_color else if (b[index] == 'O') o_color else white,
+                };
+
+                _ = try child_win.printSegment(seg, .{ .row_offset = y, .col_offset = x });
+            }
+        }
 
         try self.vx.render(self.tty.anyWriter());
 
@@ -315,6 +415,21 @@ pub const TuiApp = struct {
             const win = self.vx.window();
             win.clear();
 
+            const child_win = win.child(.{
+                .x_off = @divFloor(win.width -| 29, 2) + 4,
+                .y_off = @divFloor(win.height -| 15, 2),
+            });
+
+            const initial_x = 5;
+            const initial_y = 5;
+
+            const stride_x = 6;
+            const stride_y = 4;
+
+            const cursor_screen_x = cursor_pos.x * stride_x + initial_x;
+            const cursor_screen_y = cursor_pos.y * stride_y + initial_y;
+            child_win.showCursor(cursor_screen_x, cursor_screen_y);
+
             try self.printBoard(game);
 
             const event = self.loop.nextEvent();
@@ -338,16 +453,6 @@ pub const TuiApp = struct {
                 },
                 .winsize => |ws| try self.vx.resize(self.allocator, self.tty.anyWriter(), ws),
             }
-
-            const initial_x = 5;
-            const initial_y = 5;
-
-            const stride_x = 6;
-            const stride_y = 4;
-
-            const cursor_screen_x = cursor_pos.x * stride_x + initial_x;
-            const cursor_screen_y = cursor_pos.y * stride_y + initial_y;
-            win.showCursor(cursor_screen_x, cursor_screen_y);
         }
 
         return pos;
@@ -385,15 +490,20 @@ pub const TuiApp = struct {
             const win = self.vx.window();
             win.clear();
 
+            const child_win = win.child(.{
+                .x_off = @divFloor(win.width -| 29, 2) + 4,
+                .y_off = @divFloor(win.height -| 15, 2),
+            });
+
             if (result == zzz.WinState.Tie) {
-                _ = try win.printSegment(tie, .{ .row_offset = 16 });
+                _ = try child_win.printSegment(tie, .{ .row_offset = 16 });
             } else {
-                _ = try win.printSegment(game_won, .{ .row_offset = 16 });
+                _ = try child_win.printSegment(game_won, .{ .row_offset = 16 });
             }
 
-            _ = try win.printSegment(end, .{ .row_offset = 18 });
+            _ = try child_win.printSegment(end, .{ .row_offset = 18 });
 
-            win.hideCursor();
+            child_win.hideCursor();
             try self.printBoard(game);
 
             const event = self.loop.nextEvent();
