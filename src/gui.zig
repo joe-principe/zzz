@@ -5,10 +5,25 @@ const zzz = @import("game");
 const rl = @import("raylib");
 const rg = @import("raygui");
 
+// Width & height are struct constants because there was no reason to allow them
+// to be modified by any other code from within or without this struct
+
+/// Default screen width in pixels
 const screen_width = 600;
+
+/// Default screen height in pixels
 const screen_height = 800;
+
+/// Default screen background (clear) color
 const background_color = rl.Color.gray;
 
+/// Player 1 (X) mark color
+const x_color = rl.Color.blue;
+
+/// Player 2 (O) mark color
+const o_color = rl.Color.yellow;
+
+/// A container for the GUI state
 pub const GuiApp = struct {
     const Self = @This();
 
@@ -20,6 +35,11 @@ pub const GuiApp = struct {
 
     /// Creates the GUI window
     pub fn init(allocator: std.mem.Allocator) GuiApp {
+        return .{ .allocator = allocator, .should_quit = false };
+    }
+
+    /// Starts the window, sets default font size, and target FPS
+    pub fn setup() void {
         rl.initWindow(screen_width, screen_height, "Zig-Zag-Zoe");
 
         rl.setTargetFPS(60);
@@ -28,8 +48,6 @@ pub const GuiApp = struct {
         var font = rl.getFontDefault();
         font.baseSize = 5;
         rg.guiSetFont(font);
-
-        return .{ .allocator = allocator, .should_quit = false };
     }
 
     /// Closes the GUI window
@@ -39,9 +57,12 @@ pub const GuiApp = struct {
 
     /// Prints the start menu
     pub fn printStartScreen(self: *Self) void {
+        // This is to make the start button text large
         var font = rl.getFontDefault();
         font.baseSize = 2;
         rg.guiSetFont(font);
+
+        // Reset font size
         defer {
             font.baseSize = 5;
             rg.guiSetFont(font);
@@ -121,9 +142,12 @@ pub const GuiApp = struct {
 
             rl.clearBackground(background_color);
 
+            // Choose Player 1/2
             rl.drawText("Choose", c_offset, 100, 64, rl.Color.white);
             rl.drawText(p_text, p_offset, 170, 64, rl.Color.white);
 
+            // If the user clicks "continue" without selecting a player type,
+            // tell them they have to choose before continuing
             if (should_display_select_text) {
                 rl.drawText(sp_text, sp_offset, 400, 32, rl.Color.red);
                 rl.drawText(tc_text, tc_offset, 440, 32, rl.Color.red);
@@ -134,6 +158,9 @@ pub const GuiApp = struct {
 
             _ = rg.guiToggleGroup(.{ .x = 75, .y = 550, .width = 226, .height = 50 }, "Human;Computer", &selected_option);
 
+            // If the user clicks "continue" without selecting a player type,
+            // tell them they have to choose before continuing
+            // Otherwise, set the correct player type
             if (continue_button_pressed and (selected_option < 0 or selected_option > 1)) {
                 should_display_select_text = true;
             } else if (continue_button_pressed) {
@@ -155,6 +182,9 @@ pub const GuiApp = struct {
         var should_display_select_text = false;
 
         var selected_difficulty: i32 = -1;
+
+        // This is raylib's formatting to make multiple selection boxes
+        // ';' splits horizontally, '\n' splits vertically
         const difficulty_text = "Easy;Medium;Minimax\nCache;FastCache;Alpha-Beta";
 
         const cb_text = if (player == 0) "Choose bot 1" else "Choose bot 2";
@@ -184,9 +214,12 @@ pub const GuiApp = struct {
 
             rl.clearBackground(background_color);
 
+            // Choose bot 1/2 difficulty
             rl.drawText(cb_text, cb_offset, 100, 64, rl.Color.white);
             rl.drawText(d_text, d_offset, 170, 64, rl.Color.white);
 
+            // If the user clicks "continue" without selecting a difficulty,
+            // tell them they have to choose before continuing
             if (should_display_select_text) {
                 rl.drawText(sd_text, sd_offset, 400, 32, rl.Color.red);
                 rl.drawText(tc_text, tc_offset, 440, 32, rl.Color.red);
@@ -197,6 +230,9 @@ pub const GuiApp = struct {
 
             _ = rg.guiToggleGroup(.{ .x = 75, .y = 500, .width = 150, .height = 50 }, difficulty_text, &selected_difficulty);
 
+            // If the user clicks "continue" without selecting a difficulty,
+            // tell them they have to choose before continuing
+            // Otherwise, set the correct value
             if (continue_button_pressed and (selected_difficulty < 0 or selected_difficulty > 5)) {
                 should_display_select_text = true;
             } else if (continue_button_pressed) {
@@ -216,15 +252,17 @@ pub const GuiApp = struct {
         var player_color: rl.Color = undefined;
         if (game.current_player == zzz.Mark.X) {
             mark = "X";
-            player_color = rl.Color.blue;
+            player_color = x_color;
         } else {
             mark = "O";
-            player_color = rl.Color.yellow;
+            player_color = o_color;
         }
 
         const turn_fmt_text: [:0]const u8 = try std.fmt.allocPrintZ(self.allocator, "Turn {d}", .{game.turn});
         defer self.allocator.free(turn_fmt_text);
 
+        // Have to turn the formatted text into a c-string because that's what
+        // Raylib works with
         const turn_text: [*:0]const u8 = turn_fmt_text;
 
         const p_text = if (game.current_player == zzz.Mark.X) "Player 1 " else "Player 2 ";
@@ -284,10 +322,10 @@ pub const GuiApp = struct {
                 var mark_color: rl.Color = undefined;
                 if (b[index] == 'X') {
                     m = "X";
-                    mark_color = rl.Color.blue;
+                    mark_color = x_color;
                 } else if (b[index] == 'O') {
                     m = "O";
-                    mark_color = rl.Color.yellow;
+                    mark_color = o_color;
                 } else {
                     m = " ";
                     mark_color = rl.Color.black;
@@ -349,6 +387,9 @@ pub const GuiApp = struct {
             rl.beginDrawing();
             defer rl.endDrawing();
 
+            // We can't have i be a capture from a range within the for loop
+            // because that'd make i a usize instead of u8, so the functions
+            // relying on it won't be able to use the value
             var i: u8 = 0;
             for (squares) |square| {
                 const color = if (game.board.isPositionOccupied(i)) rl.Color.red else rl.Color.green;
@@ -378,15 +419,7 @@ pub const GuiApp = struct {
         game: *zzz.Game,
         result: zzz.WinState,
     ) !void {
-        var winner: u8 = undefined;
-        var winner_color: rl.Color = undefined;
-        if (result == zzz.WinState.X) {
-            winner = 1;
-            winner_color = rl.Color.blue;
-        } else if (result == zzz.WinState.O) {
-            winner = 2;
-            winner_color = rl.Color.yellow;
-        }
+        const winner_color = if (result == zzz.WinState.X) x_color else o_color;
 
         const p_text = if (result == zzz.WinState.X) "Player 1" else "Player 2";
         const p_width = rl.measureText(p_text, 48);

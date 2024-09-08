@@ -50,11 +50,12 @@ pub const TuiApp = struct {
     }
 
     /// Sets the default values of the TUI event loop and starts the loop
-    pub fn init_loop(self: *Self) !void {
+    pub fn setup(self: *Self) !void {
         self.loop = .{
             .tty = &self.tty,
             .vaxis = &self.vx,
         };
+
         try self.loop.init();
         try self.loop.start();
     }

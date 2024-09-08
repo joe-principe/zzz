@@ -3,8 +3,6 @@ const assert = std.debug.assert;
 
 const ai = @import("ai");
 const ui = @import("ui");
-const gui = @import("gui");
-const tui = @import("tui");
 const zzz = @import("game");
 
 pub fn main() !void {
@@ -23,7 +21,7 @@ pub fn main() !void {
     const gui_mode: bool = @import("build_options").gui;
 
     var app: ui.App = try ui.App.init(allocator, gui_mode);
-    if (!gui_mode) try app.tui.init_loop();
+    try app.setup();
     defer app.deinit();
 
     var game = zzz.Game.init();

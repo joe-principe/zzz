@@ -4,20 +4,36 @@ const gui = @import("gui");
 const tui = @import("tui");
 const zzz = @import("game");
 
+/// Allows the user to quit the game at any time from any screen
+// Idk if there's a more elegant solution to this, but this works nicely so idc
 pub var should_quit: bool = false;
 
+/// An interface for the game's UI
+// Done as a tagged union to allow the game to operate in either GUI or TUI mode
+// without much additional code (other than what's in this struct, ofc)
 pub const App = union(enum) {
     const Self = @This();
 
+    /// App in GUI Mode
     gui: gui.GuiApp,
+
+    /// App in TUI Mode
     tui: tui.TuiApp,
 
     /// Sets the default values of the UI
     pub fn init(allocator: std.mem.Allocator, gui_mode: bool) !App {
-        if (gui_mode) {
-            return App{ .gui = gui.GuiApp.init(allocator) };
+        if (gui_mode) return .{ .gui = gui.GuiApp.init(allocator) };
+        return .{ .tui = try tui.TuiApp.init(allocator) };
+    }
+
+    /// Sets up the chosen UI mode
+    // This is mostly a convenience thing to allow for creating the TUI loop
+    // without having a weird line of TUI only code within main.zig
+    pub fn setup(self: *Self) !void {
+        switch (self.*) {
+            .gui => gui.GuiApp.setup(),
+            .tui => try self.tui.setup(),
         }
-        return App{ .tui = try tui.TuiApp.init(allocator) };
     }
 
     /// Closes the UI window

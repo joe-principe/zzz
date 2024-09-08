@@ -31,7 +31,7 @@ pub const Player = union(PlayerType) {
     Computer: ai.BotDifficulty,
 };
 
-/// The types of players
+/// The type of a player
 pub const PlayerType = enum(u1) {
     /// Human playing at the computer
     Local,

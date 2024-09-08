@@ -74,8 +74,6 @@ pub fn build(b: *std.Build) void {
 
     exe.root_module.addImport("ai", ai_module);
     exe.root_module.addImport("game", game_module);
-    exe.root_module.addImport("gui", gui_module);
-    exe.root_module.addImport("tui", tui_module);
     exe.root_module.addImport("ui", ui_module);
 
     exe.linkLibrary(raylib_artifact);
