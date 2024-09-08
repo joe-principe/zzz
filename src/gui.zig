@@ -15,7 +15,7 @@ const screen_width = 600;
 const screen_height = 800;
 
 /// Default screen background (clear) color
-const background_color = rl.Color.gray;
+const background_color = rl.Color.dark_gray;
 
 /// Player 1 (X) mark color
 const x_color = rl.Color.blue;
@@ -428,11 +428,7 @@ pub const GuiApp = struct {
         const tie_text = "The game is a tie!";
         const end_text = "Press Esc to exit";
 
-        while (true) {
-            // Program quits faster if the check is within the loop rather than
-            // at the start
-            if (rl.windowShouldClose()) break;
-
+        while (!rl.windowShouldClose()) {
             rl.beginDrawing();
             defer rl.endDrawing();
 
@@ -448,6 +444,9 @@ pub const GuiApp = struct {
             rl.drawText(end_text, 30, 740, 24, rl.Color.black);
 
             try self.printBoard(game);
+
+            // Program quits faster with this here, idk why
+            if (rl.windowShouldClose()) break;
         }
     }
 };
