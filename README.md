@@ -3,7 +3,14 @@ Tic-tac-toe TUI/GUI game written in Zig
 
 # Features
 * TUI Interface
+
+![Instance of a human playing against the fast cache bot in TUI
+mode](img/tui.gif)
+
 * GUI Interface
+
+![Instance of a human playing against the easy bot in GUI mode](img/gui.gif)
+
 * Local PvP
 * CPU players with adjustable difficulty
     * Bots can play against other bots, too!
@@ -32,9 +39,14 @@ numlock is off).
 
 Press enter, space, or keypad enter to select.
 
+The game can be quit at any time by pressing escape or Ctrl-C
+
 ## GUI
 Click on buttons and squares with your mouse. Note that the game is 600x800
 resolution, so make sure your monitor is >= 800 pixels high
+
+The game can be quit at any time by pressing escape or the x button at the top
+of the window
 
 # Dependencies
 1) [Zig](https://ziglang.org/)
