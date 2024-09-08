@@ -69,14 +69,7 @@ pub const GuiApp = struct {
         }
 
         const zzz_width = rl.measureText("Zig-Zag-Zoe", 80);
-
-        const zig_width = rl.measureText("Zig-", 80);
-        const zig_offset = @divFloor((screen_width - zzz_width), 2);
-
-        const zag_width = rl.measureText("Zag-", 80);
-        const zag_offset = zig_offset + zig_width;
-
-        const zoe_offset = zag_offset + zag_width;
+        const zzz_offset = @divFloor(screen_width - zzz_width, 2);
 
         var start_button_pressed = false;
         var start_button_state: i32 = undefined;
@@ -92,9 +85,7 @@ pub const GuiApp = struct {
 
             rl.clearBackground(background_color);
 
-            rl.drawText("Zig", zig_offset, 100, 80, rl.Color.white);
-            rl.drawText("Zag", zag_offset, 180, 80, rl.Color.white);
-            rl.drawText("Zoe", zoe_offset, 260, 80, rl.Color.white);
+            rl.drawText("Zig-Zag-Zoe", zzz_offset, 180, 80, rl.Color.white);
 
             start_button_state = rg.guiButton(.{ .x = 200, .y = 500, .width = 200, .height = 100 }, "Start");
             start_button_pressed = if (start_button_state == 0) false else true;
